@@ -39,8 +39,8 @@ CREATE TABLE manajemen_rekomendasi (
 );
 
 insert into users values 
-(1, 'fina', '016', 'admin'), 
-(2, 'komang', '003', 'admin'), 
+(1, 'nabil', '024', 'admin'), 
+(2, 'cnopy', '026', 'admin'), 
 (3, 'zaki', '020', 'admin'), 
 (4, 'senku', '1234', 'user');
 
