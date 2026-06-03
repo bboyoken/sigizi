@@ -52,7 +52,10 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 .btn-logout:hover{background:rgba(239,68,68,.25);color:#fff;border-color:var(--danger)}
 
 /* ─── MAIN CONTENT ───────────────────────────────────────────────────── */
-.main{flex:1;margin-left:260px;display:flex;flex-direction:column;min-height:100vh}
+.main{
+  flex:1;margin-left:260px;display:flex;flex-direction:column;min-height:100vh;
+  background: linear-gradient(rgba(240, 253, 244, 0.80), rgba(240, 253, 244, 0.80)), url('bg_bahlil.jpg') left center / cover;
+}
 .topbar{
   background:var(--card);border-bottom:1px solid var(--border);padding:0 32px;
   height:66px;display:flex;align-items:center;justify-content:space-between;
@@ -66,7 +69,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:1
 /* ─── AUTH SCREEN ────────────────────────────────────────────────────── */
 #auth-screen{
   min-height:100vh;display:flex;
-  background:linear-gradient(135deg,var(--g1) 0%,var(--g2) 40%,#0f4c25 100%);
+  background: linear-gradient(135deg, rgba(0,0,0,0.45) 0%, rgba(13,79,46,0.55) 50%, rgba(0,0,0,0.40) 100%), url('bg_bahlil.jpg') center/cover no-repeat;
   position:relative;overflow:hidden;
 }
 #auth-screen::before{
