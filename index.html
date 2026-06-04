@@ -1,163 +1,193 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>SUWANDI – Sistem Informasi Gizi</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SUWANDI – Sistem Informasi Gizi</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<!-- ─── AUTH SCREEN ──────────────────────────────────────────────────── -->
-<div id="auth-screen">
-  <div class="auth-left">
-    <h1>Selamat Datang di<br><span>SUWANDI</span></h1>
-    <p>Sistem Informasi Gizi – platform cerdas untuk memantau, menganalisis, dan mengelola kebutuhan nutrisi harian Anda.</p>
-    <div class="auth-features">
-      <div class="auth-feat"><div class="auth-feat-icon"><i class="fa fa-utensils"></i></div>Katalog gizi makanan lengkap</div>
-      <div class="auth-feat"><div class="auth-feat-icon"><i class="fa fa-calculator"></i></div>Kalkulator BMI & kalori harian</div>
-      <div class="auth-feat"><div class="auth-feat-icon"><i class="fa fa-leaf"></i></div>Panduan katalog diet lengkap</div>
-      <div class="auth-feat"><div class="auth-feat-icon"><i class="fa fa-chart-bar"></i></div>Dashboard admin & manajemen data</div>
+  <!-- ─── AUTH SCREEN ──────────────────────────────────────────────────── -->
+  <div id="auth-screen">
+    <div class="auth-left">
+      <h1>Selamat Datang di<br><span>SUWANDI</span></h1>
+      <p>Sistem Informasi Gizi – platform cerdas untuk memantau, menganalisis, dan mengelola kebutuhan nutrisi harian
+        Anda.</p>
+      <div class="auth-features">
+        <div class="auth-feat">
+          <div class="auth-feat-icon"><i class="fa fa-utensils"></i></div>Katalog gizi makanan lengkap
+        </div>
+        <div class="auth-feat">
+          <div class="auth-feat-icon"><i class="fa fa-calculator"></i></div>Kalkulator BMI & kalori harian
+        </div>
+        <div class="auth-feat">
+          <div class="auth-feat-icon"><i class="fa fa-leaf"></i></div>Panduan katalog diet lengkap
+        </div>
+        <div class="auth-feat">
+          <div class="auth-feat-icon"><i class="fa fa-chart-bar"></i></div>Dashboard admin & manajemen data
+        </div>
+      </div>
     </div>
-  </div>
-  <div class="auth-right">
-    <div class="auth-card">
-      <div style="text-align:center;margin-bottom:24px">
-        <img src="logo.png" alt="Logo Suwandi" style="height: 55px; max-width: 100%; object-fit: contain; margin-bottom: 8px;" />
-        <p style="font-size:.82rem;color:var(--muted);margin-top:2px">Sistem Informasi Gizi</p>
-      </div>
-      <div class="auth-tabs">
-        <button class="auth-tab active" onclick="switchTab('login')">Login</button>
-        <button class="auth-tab" onclick="switchTab('register')">Register</button>
-        <button class="auth-tab" onclick="switchTab('katalog-diet')">Katalog Diet</button>
-      </div>
+    <div class="auth-right">
+      <div class="auth-card">
+        <div style="text-align:center;margin-bottom:24px">
+          <img src="logo.png" alt="Logo Suwandi"
+            style="height: 55px; max-width: 100%; object-fit: contain; margin-bottom: 8px;" />
+          <p style="font-size:.82rem;color:var(--muted);margin-top:2px">Sistem Informasi Gizi</p>
+        </div>
+        <div class="auth-tabs">
+          <button class="auth-tab active" onclick="switchTab('login')">Login</button>
+          <button class="auth-tab" onclick="switchTab('register')">Register</button>
+          <button class="auth-tab" onclick="switchTab('katalog-diet')">Katalog Diet</button>
+        </div>
 
-      <!-- LOGIN FORM -->
-      <div id="form-login" class="auth-form active">
-        <div id="attempts-wrap" style="margin-bottom:14px">
-          <p style="font-size:.78rem;color:var(--muted);margin-bottom:6px">Sisa percobaan login:</p>
-          <div class="attempts-bar" id="attempts-dots"></div>
+        <!-- LOGIN FORM -->
+        <div id="form-login" class="auth-form active">
+          <div id="attempts-wrap" style="margin-bottom:14px">
+            <p style="font-size:.78rem;color:var(--muted);margin-bottom:6px">Sisa percobaan login:</p>
+            <div class="attempts-bar" id="attempts-dots"></div>
+          </div>
+          <div id="login-alert"></div>
+          <div class="form-group">
+            <label class="form-label"><i class="fa fa-user"
+                style="margin-right:6px;color:var(--g3)"></i>Username</label>
+            <input class="form-input" id="login-user" type="text" placeholder="Masukkan username" />
+          </div>
+          <div class="form-group">
+            <label class="form-label"><i class="fa fa-lock"
+                style="margin-right:6px;color:var(--g3)"></i>Password</label>
+            <div style="position:relative">
+              <input class="form-input" id="login-pass" type="password" placeholder="Masukkan password"
+                style="padding-right:44px" />
+              <button onclick="togglePwd('login-pass')"
+                style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted)"><i
+                  class="fa fa-eye" id="eye-login"></i></button>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="doLogin()"><i class="fa fa-sign-in-alt"></i>Masuk</button>
         </div>
-        <div id="login-alert"></div>
-        <div class="form-group">
-          <label class="form-label"><i class="fa fa-user" style="margin-right:6px;color:var(--g3)"></i>Username</label>
-          <input class="form-input" id="login-user" type="text" placeholder="Masukkan username"/>
+
+        <!-- REGISTER FORM -->
+        <div id="form-register" class="auth-form">
+          <div id="reg-alert"></div>
+          <div class="form-group">
+            <label class="form-label"><i class="fa fa-user"
+                style="margin-right:6px;color:var(--g3)"></i>Username</label>
+            <input class="form-input" id="reg-user" type="text" placeholder="Pilih username unik" />
+          </div>
+          <div class="form-group">
+            <label class="form-label"><i class="fa fa-lock"
+                style="margin-right:6px;color:var(--g3)"></i>Password</label>
+            <div style="position:relative">
+              <input class="form-input" id="reg-pass" type="password" placeholder="Buat password"
+                style="padding-right:44px" />
+              <button onclick="togglePwd('reg-pass')"
+                style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted)"><i
+                  class="fa fa-eye" id="eye-reg"></i></button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label"><i class="fa fa-lock" style="margin-right:6px;color:var(--g3)"></i>Konfirmasi
+              Password</label>
+            <input class="form-input" id="reg-pass2" type="password" placeholder="Ulangi password" />
+          </div>
+          <button class="btn btn-primary" onclick="doRegister()"><i class="fa fa-user-plus"></i>Daftar Sekarang</button>
         </div>
-        <div class="form-group">
-          <label class="form-label"><i class="fa fa-lock" style="margin-right:6px;color:var(--g3)"></i>Password</label>
-          <div style="position:relative">
-            <input class="form-input" id="login-pass" type="password" placeholder="Masukkan password" style="padding-right:44px"/>
-            <button onclick="togglePwd('login-pass')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted)"><i class="fa fa-eye" id="eye-login"></i></button>
+
+        <div id="form-katalog-diet" class="auth-form">
+          <p style="font-size:.85rem;color:var(--muted);margin-bottom:15px;text-align:center;">
+            Intip berbagai rekomendasi program diet kami di bawah ini.
+          </p>
+          <div id="guest-diet-container" style="max-height: 400px; overflow-y: auto; padding-right: 5px;">
           </div>
         </div>
-        <button class="btn btn-primary" onclick="doLogin()"><i class="fa fa-sign-in-alt"></i>Masuk</button>
-      </div>
-
-      <!-- REGISTER FORM -->
-      <div id="form-register" class="auth-form">
-        <div id="reg-alert"></div>
-        <div class="form-group">
-          <label class="form-label"><i class="fa fa-user" style="margin-right:6px;color:var(--g3)"></i>Username</label>
-          <input class="form-input" id="reg-user" type="text" placeholder="Pilih username unik"/>
-        </div>
-        <div class="form-group">
-          <label class="form-label"><i class="fa fa-lock" style="margin-right:6px;color:var(--g3)"></i>Password</label>
-          <div style="position:relative">
-            <input class="form-input" id="reg-pass" type="password" placeholder="Buat password" style="padding-right:44px"/>
-            <button onclick="togglePwd('reg-pass')" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted)"><i class="fa fa-eye" id="eye-reg"></i></button>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label"><i class="fa fa-lock" style="margin-right:6px;color:var(--g3)"></i>Konfirmasi Password</label>
-          <input class="form-input" id="reg-pass2" type="password" placeholder="Ulangi password"/>
-        </div>
-        <button class="btn btn-primary" onclick="doRegister()"><i class="fa fa-user-plus"></i>Daftar Sekarang</button>
-      </div>
-
-      <div id="form-katalog-diet" class="auth-form">
-        <p style="font-size:.85rem;color:var(--muted);margin-bottom:15px;text-align:center;">
-          Intip berbagai rekomendasi program diet kami di bawah ini.
-        </p>
-        <div id="guest-diet-container" style="max-height: 400px; overflow-y: auto; padding-right: 5px;">
-        </div>
       </div>
     </div>
   </div>
-</div>
 
-<!-- ─── APP SCREEN ────────────────────────────────────────────────────── -->
-<div id="app" style="display:none">
-  <!-- SIDEBAR -->
-  <aside class="sidebar" id="sidebar">
-    <div class="sidebar-logo" style="text-align:center; padding: 24px 16px 15px;">
-      <div style="background: #fff; padding: 8px 16px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-        <img src="logo.png" alt="Logo Suwandi" style="max-width: 100%; height: auto; max-height: 30px; object-fit: contain;" />
+  <!-- ─── APP SCREEN ────────────────────────────────────────────────────── -->
+  <div id="app" style="display:none">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo" style="text-align:center; padding: 24px 16px 15px;">
+        <div
+          style="background: #fff; padding: 8px 16px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+          <img src="logo.png" alt="Logo Suwandi"
+            style="max-width: 100%; height: auto; max-height: 30px; object-fit: contain;" />
+        </div>
+        <span>Sistem Informasi Gizi</span>
       </div>
-      <span>Sistem Informasi Gizi</span>
-    </div>
-    <div class="sidebar-user">
-      <div class="user-avatar" id="sb-avatar">?</div>
-      <div class="user-info">
-        <div class="user-name" id="sb-name">-</div>
-        <div class="user-role" id="sb-role">-</div>
+      <div class="sidebar-user">
+        <div class="user-avatar" id="sb-avatar">?</div>
+        <div class="user-info">
+          <div class="user-name" id="sb-name">-</div>
+          <div class="user-role" id="sb-role">-</div>
+        </div>
       </div>
-    </div>
-    <nav class="sidebar-nav" id="sidebar-nav"></nav>
-    <div class="sidebar-footer">
-      <button class="btn-logout" onclick="doLogout()"><i class="fa fa-sign-out-alt"></i>Keluar</button>
-    </div>
-  </aside>
+      <nav class="sidebar-nav" id="sidebar-nav"></nav>
+      <div class="sidebar-footer">
+        <button class="btn-logout" onclick="doLogout()"><i class="fa fa-sign-out-alt"></i>Keluar</button>
+      </div>
+    </aside>
 
-  <!-- MAIN -->
-  <main class="main">
-    <div class="topbar">
-      <div style="display:flex;align-items:center;gap:14px">
-        <button onclick="toggleSidebar()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:1.1rem;display:none" id="mob-menu"><i class="fa fa-bars"></i></button>
-        <span class="topbar-title" id="topbar-title">Dashboard</span>
+    <!-- MAIN -->
+    <main class="main">
+      <div class="topbar">
+        <div style="display:flex;align-items:center;gap:14px">
+          <button onclick="toggleSidebar()"
+            style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:1.1rem;display:none"
+            id="mob-menu"><i class="fa fa-bars"></i></button>
+          <span class="topbar-title" id="topbar-title">Dashboard</span>
+        </div>
+        <div class="topbar-right">
+          <span id="topbar-user" style="font-size:.85rem;color:var(--muted)"></span>
+          <span class="badge" id="topbar-role"></span>
+        </div>
       </div>
-      <div class="topbar-right">
-        <span id="topbar-user" style="font-size:.85rem;color:var(--muted)"></span>
-        <span class="badge" id="topbar-role"></span>
+
+      <div class="content" id="content-area">
+        <!-- PAGES injected here -->
       </div>
-    </div>
-
-    <div class="content" id="content-area">
-      <!-- PAGES injected here -->
-    </div>
-  </main>
-</div>
-
-<!-- ─── MODAL ─────────────────────────────────────────────────────────── -->
-<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
-  <div class="modal" id="modal-box">
-    <div class="modal-header">
-      <div class="modal-title" id="modal-title"></div>
-      <button class="modal-close" onclick="closeModal()"><i class="fa fa-times"></i></button>
-    </div>
-    <div id="modal-body"></div>
-    <div class="modal-footer" id="modal-footer"></div>
+    </main>
   </div>
-</div>
 
-<!-- ─── CONFIRM ───────────────────────────────────────────────────────── -->
-<div id="confirm-overlay">
-  <div id="confirm-box">
-    <div style="font-size:2.5rem;margin-bottom:12px" id="confirm-icon">⚠️</div>
-    <h3 id="confirm-title">Konfirmasi</h3>
-    <p id="confirm-msg">Apakah Anda yakin?</p>
-    <div class="btn-row">
-      <button class="btn btn-outline btn-sm" onclick="closeConfirm()">Batal</button>
-      <button class="btn btn-danger btn-sm" id="confirm-ok">Ya, Lanjutkan</button>
+  <!-- ─── MODAL ─────────────────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+    <div class="modal" id="modal-box">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-title"></div>
+        <button class="modal-close" onclick="closeModal()"><i class="fa fa-times"></i></button>
+      </div>
+      <div id="modal-body"></div>
+      <div class="modal-footer" id="modal-footer"></div>
     </div>
   </div>
-</div>
 
-<!-- ─── TOAST ─────────────────────────────────────────────────────────── -->
-<div id="toast-container"></div>
+  <!-- ─── CONFIRM ───────────────────────────────────────────────────────── -->
+  <div id="confirm-overlay">
+    <div id="confirm-box">
+      <div style="font-size:2.5rem;margin-bottom:12px" id="confirm-icon">⚠️</div>
+      <h3 id="confirm-title">Konfirmasi</h3>
+      <p id="confirm-msg">Apakah Anda yakin?</p>
+      <div class="btn-row">
+        <button class="btn btn-outline btn-sm" onclick="closeConfirm()">Batal</button>
+        <button class="btn btn-danger btn-sm" id="confirm-ok">Ya, Lanjutkan</button>
+      </div>
+    </div>
+  </div>
 
-<script src="script.js"></script>
+  <!-- ─── TOAST ─────────────────────────────────────────────────────────── -->
+  <div id="toast-container"></div>
+
+  <script src="script.js"></script>
 </body>
+
 </html>
