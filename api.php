@@ -125,11 +125,11 @@ switch ($action) {
         catatLog($conn, $_SESSION['user_id'] ?? 0, "Mencari makanan: $q");
         respond(['success' => true, 'data' => $rows]);
 
-    // ─── REQUEST ─────────────────────────────────────────────────────────────
+// ─── REQUEST ─────────────────────────────────────────────────────────────
     case 'get_requests':
         if (empty($_SESSION['user_id'])) respond(['success' => false, 'message' => 'Login terlebih dahulu']);
         if ($_SESSION['role'] === 'admin') {
-            $res = $conn->query("SELECT r.*, u.username FROM request_user r JOIN users u ON r.id_user=u.id ORDER BY r.id_request ASC");
+            $res = $conn->query("SELECT r.*, u.username FROM request_user r JOIN users u ON r.id_user=u.id ORDER BY r.id_request DESC");
         } else {
             $uid = $_SESSION['user_id'];
             $res = $conn->query("SELECT r.*, u.username FROM request_user r JOIN users u ON r.id_user=u.id WHERE r.id_user=$uid ORDER BY r.id_request DESC");
@@ -170,7 +170,7 @@ switch ($action) {
         catatLog($conn, $_SESSION['user_id'], "Konfirmasi request ID $id_req menjadi $stat");
         respond(['success' => true, 'message' => "Request berhasil di-$stat"]);
 
-    // ─── LOG ─────────────────────────────────────────────────────────────────
+// ─── LOG ─────────────────────────────────────────────────────────────────
     case 'get_logs':
         if (empty($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') respond(['success' => false, 'message' => 'Akses ditolak']);
         $q = $conn->real_escape_string($_GET['q'] ?? '');

@@ -532,24 +532,25 @@ const pageRenderers = {
   'request-admin': async (el) => {
     const load = async () => {
       const d = await api('get_requests');
-      document.getElementById('req-admin-body').innerHTML = (d.data || []).length ? d.data.map(r => `
+      document.getElementById('req-admin-body').innerHTML = (d.data || []).length ? d.data.map((r, i) => `
         <tr>
-          <td class="td-center">${r.id_request}</td>
+          <td class="td-center">${i + 1}</td>
+          <td class="td-center">#${r.id_user}</td>
           <td>${r.username}</td>
           <td><strong>${r.nama_makanan_req}</strong></td>
           <td>${statusBadge(r.status_request)}</td>
           <td class="td-center">${r.status_request === 'Pending' ? `
             <button class="btn btn-success btn-sm" onclick="terimaReq(${r.id_request},'${r.nama_makanan_req.replace(/'/g, "\\'")}')"><i class="fa fa-check"></i>Terima</button>
             <button class="btn btn-danger btn-sm" onclick="tolakReq(${r.id_request})" style="margin-left:4px"><i class="fa fa-times"></i>Tolak</button>` : '-'}</td>
-        </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--muted)">Tidak ada request</td></tr>`;
+        </tr>`).join('') : `<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted)">Tidak ada request</td></tr>`;
     };
 
     el.innerHTML = `
       <div class="page-header"><h2><i class="fa fa-clipboard-list" style="color:var(--g3)"></i>Konfirmasi Request User</h2><p>Terima atau tolak request makanan dari pengguna</p></div>
       <div class="card">
         <div class="table-wrap"><table>
-          <thead><tr><th class="td-center">ID</th><th>Username</th><th>Nama Makanan</th><th>Status</th><th class="td-center">Aksi</th></tr></thead>
-          <tbody id="req-admin-body"><tr><td colspan="5" style="text-align:center"><div class="spinner" style="margin:auto"></div></td></tr></tbody>
+          <thead><tr><th class="td-center">No</th><th class="td-center">ID</th><th>Username</th><th>Nama Makanan</th><th>Status</th><th class="td-center">Aksi</th></tr></thead>
+          <tbody id="req-admin-body"><tr><td colspan="6" style="text-align:center"><div class="spinner" style="margin:auto"></div></td></tr></tbody>
         </table></div>
       </div>`;
     await load();
@@ -589,13 +590,14 @@ const pageRenderers = {
   'log-admin': async (el) => {
     const load = async (q = '') => {
       const d = await api('get_logs', 'GET', null, { q });
-      document.getElementById('log-body').innerHTML = (d.data || []).length ? d.data.map(r => `
+      document.getElementById('log-body').innerHTML = (d.data || []).length ? d.data.map((r, i) => `
         <tr>
-          <td class="td-center">${r.id_log}</td>
+          <td class="td-center">${i + 1}</td>
+          <td class="td-center">#${r.id_user}</td>
           <td>${r.username}</td>
           <td>${r.aktivitas}</td>
           <td style="font-size:.78rem;color:var(--muted);white-space:nowrap">${r.waktu}</td>
-        </tr>`).join('') : `<tr><td colspan="4" style="text-align:center;padding:30px;color:var(--muted)">Tidak ada log</td></tr>`;
+        </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--muted)">Tidak ada log</td></tr>`;
     };
     el.innerHTML = `
       <div class="page-header"><h2><i class="fa fa-history" style="color:var(--g3)"></i>Log Aktivitas</h2><p>Riwayat seluruh aktivitas pengguna</p></div>
@@ -604,8 +606,8 @@ const pageRenderers = {
           <div class="search-wrap"><i class="fa fa-search"></i><input class="search-input" id="log-q" placeholder="Cari log aktivitas..." oninput="logSearch(this.value)"/></div>
         </div>
         <div class="table-wrap"><table>
-          <thead><tr><th class="td-center">ID</th><th>User</th><th>Aktivitas</th><th>Waktu</th></tr></thead>
-          <tbody id="log-body"><tr><td colspan="4" style="text-align:center"><div class="spinner" style="margin:auto"></div></td></tr></tbody>
+          <thead><tr><th class="td-center">No</th><th class="td-center">ID</th><th>User</th><th>Aktivitas</th><th>Waktu</th></tr></thead>
+          <tbody id="log-body"><tr><td colspan="5" style="text-align:center"><div class="spinner" style="margin:auto"></div></td></tr></tbody>
         </table></div>
       </div>`;
     await load();
@@ -617,7 +619,7 @@ const pageRenderers = {
   'user-admin': async (el) => {
     const load = async (q = '') => {
       const d = await api('get_users', 'GET', null, { q });
-      document.getElementById('usr-body').innerHTML = (d.data || []).map(r => `
+      document.getElementById('usr-body').innerHTML = (d.data || []).map((r, i) => `
         <tr>
           <td class="td-center">${r.id}</td>
           <td><strong>${r.username}</strong></td>
