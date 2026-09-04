@@ -1419,3 +1419,31 @@ tbody td {
     font-size: 1.3rem;
   }
 }
+
+/* ── Kalkulator Anggaran Gizi ────────────────────────────────────────────── */
+.budget-preset {
+  padding: 5px 11px;
+  font-size: .75rem;
+  font-weight: 600;
+  border-radius: 99px;
+  border: 1.5px solid var(--g4);
+  background: var(--bg);
+  color: var(--g3);
+  cursor: pointer;
+  transition: all var(--trans);
+  white-space: nowrap;
+}
+
+.budget-preset:hover {
+  background: var(--g4);
+  color: #fff;
+  border-color: var(--g3);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(21, 128, 61, .25);
+}
+
+@media (max-width: 860px) {
+  #content-area>div>div[style*="grid-template-columns:360px"] {
+    grid-template-columns: 1fr !important;
+  }
+}

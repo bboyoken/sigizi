@@ -181,6 +181,7 @@ const userNav = [
   { id: 'katalog-gizi', icon: 'fa-bowl-food', label: 'Katalog Gizi' },
   { id: 'kalkulator', icon: 'fa-calculator', label: 'Kalkulator' },
   { id: 'kalkulator-abdi', icon: 'fa-user-tie', label: 'Kalkulator Abdi Negara' },
+  { id: 'budget-gizi', icon: 'fa-wallet', label: 'Anggaran Gizi' },
   { id: 'request-user', icon: 'fa-paper-plane', label: 'Request Makanan' },
 ];
 const adminNav = [
@@ -246,6 +247,7 @@ function navigateTo(page) {
     'katalog-diet': 'Katalog Diet',
     'request-user': 'Request Makanan',
     'kalkulator-abdi': 'Kalkulator Abdi Negara',
+    'budget-gizi': 'Kalkulator Anggaran Gizi',
   };
   document.getElementById('topbar-title').textContent = titles[page] || page;
 
@@ -999,6 +1001,301 @@ const pageRenderers = {
         `<button class="btn btn-outline" style="width:100%" onclick="closeModal()">Tutup</button>` // Tombol bawah
       );
     };
+  },
+
+  // ── KALKULATOR ANGGARAN GIZI ─────────────────────────────────────────────
+  'budget-gizi': (el) => {
+
+    // Database bahan makanan lokal murah
+    const bahanLokal = [
+      { id: 'telur', nama: 'Telur Ayam', harga: 3000, sat: 'butir', gram: 55, kal: 78, pro: 6.3, karb: 0.6, lem: 5.3, kat: 'protein' },
+      { id: 'tahu', nama: 'Tahu Putih', harga: 1250, sat: 'potong', gram: 80, kal: 62, pro: 6.7, karb: 1.9, lem: 3.5, kat: 'protein' },
+      { id: 'tempe', nama: 'Tempe Besar', harga: 5000, sat: 'bungkus', gram: 400, kal: 768, pro: 75.2, karb: 60, lem: 29.6, kat: 'protein' },
+      { id: 'ayam_dada', nama: 'Dada Ayam Pasar', harga: 8000, sat: 'potong', gram: 100, kal: 165, pro: 31, karb: 0, lem: 3.6, kat: 'protein' },
+      { id: 'ikan_kembung', nama: 'Ikan Kembung', harga: 10000, sat: 'ekor', gram: 100, kal: 105, pro: 22, karb: 0, lem: 1.9, kat: 'protein' },
+      { id: 'kacang_tanah', nama: 'Kacang Tanah', harga: 2000, sat: 'genggam', gram: 30, kal: 170, pro: 7.7, karb: 5.0, lem: 14, kat: 'protein' },
+      { id: 'tahu_goreng', nama: 'Tahu Goreng', harga: 2000, sat: 'potong', gram: 80, kal: 109, pro: 7.0, karb: 2.8, lem: 8.1, kat: 'protein' },
+      { id: 'nasi', nama: 'Beras Putih', harga: 15000, sat: 'kg', gram: 1000, kal: 1300, pro: 26.7, karb: 280, lem: 3.3, kat: 'karbo' },
+      { id: 'nasi_merah', nama: 'Nasi Merah', harga: 4000, sat: 'porsi', gram: 150, kal: 173, pro: 4.5, karb: 36, lem: 1.0, kat: 'karbo' },
+      { id: 'roti', nama: 'Roti Tawar', harga: 16000, sat: 'bungkus', gram: 500, kal: 1320, pro: 45, karb: 250, lem: 16.5, kat: 'karbo' },
+      { id: 'ubi', nama: 'Ubi Jalar', harga: 2000, sat: 'buah', gram: 100, kal: 86, pro: 1.6, karb: 20, lem: 0.1, kat: 'karbo' },
+      { id: 'oatmeal', nama: 'Oatmeal Instan', harga: 15000, sat: 'kemasan', gram: 200, kal: 754, pro: 25.7, karb: 131, lem: 14.3, kat: 'karbo' },
+      { id: 'pisang', nama: 'Pisang', harga: 15000, sat: 'ikat', gram: 1000, kal: 890, pro: 11, karb: 228, lem: 3.3, kat: 'buah' },
+      { id: 'pepaya', nama: 'Pepaya', harga: 2000, sat: 'potong', gram: 150, kal: 60, pro: 0.7, karb: 15, lem: 0.1, kat: 'buah' },
+      { id: 'bayam', nama: 'Bayam Rebus', harga: 2000, sat: 'porsi', gram: 100, kal: 23, pro: 2.9, karb: 3.6, lem: 0.4, kat: 'sayur' },
+      { id: 'kangkung', nama: 'Kangkung', harga: 5000, sat: 'ikat', gram: 200, kal: 38, pro: 4.0, karb: 6.2, lem: 0.4, kat: 'sayur' },
+      { id: 'sawi', nama: 'Sawi', harga: 5000, sat: 'ikat', gram: 200, kal: 22, pro: 2.7, karb: 3.4, lem: 0.3, kat: 'sayur' },
+      { id: 'mie_instan', nama: 'Mie Instan', harga: 3500, sat: 'bungkus', gram: 85, kal: 380, pro: 8.0, karb: 52, lem: 15, kat: 'karbo' },
+      { id: 'susu_kotak', nama: 'Susu UHT Milk', harga: 6000, sat: 'kotak', gram: 250, kal: 158, pro: 8.8, karb: 17.5, lem: 6.0, kat: 'lainnya' },
+    ];
+
+    // Algoritma Greedy 3 Fase
+    function optimasiAnggaranGizi(budget, targetProtein, preferensi) {
+      let sisa = budget;
+      let totalPro = 0, totalKal = 0, totalKarb = 0, totalLem = 0, totalHarga = 0;
+      const keranjang = [];
+
+      let pool = bahanLokal.filter(b => {
+        if (preferensi === 'vegetarian') return b.kat !== 'protein' || ['tahu', 'tempe', 'telur', 'kacang_tanah', 'tahu_goreng'].includes(b.id);
+        if (preferensi === 'ikan') return b.kat !== 'protein' || ['ikan_kembung', 'tahu', 'tempe', 'telur', 'kacang_tanah', 'tahu_goreng'].includes(b.id);
+        return true;
+      });
+
+      // Fase 1: Protein (greedy protein/harga tertinggi)
+      const proteinPool = pool.filter(b => b.kat === 'protein').sort((a, b) => (b.pro / b.harga) - (a.pro / a.harga));
+      for (const b of proteinPool) {
+        if (totalPro >= targetProtein) break;
+        const porsiDibutuhkan = Math.ceil((targetProtein - totalPro) / b.pro);
+        const porsiMampu = Math.floor(sisa / b.harga);
+        const porsi = Math.min(porsiDibutuhkan, porsiMampu, 4);
+        if (porsi <= 0) continue;
+        const hargaTotal = porsi * b.harga;
+        keranjang.push({ ...b, porsi, hargaTotal });
+        sisa -= hargaTotal; totalPro += b.pro * porsi; totalKal += b.kal * porsi;
+        totalKarb += b.karb * porsi; totalLem += b.lem * porsi; totalHarga += hargaTotal;
+      }
+
+      // Fase 2: Karbohidrat
+      const karboPool = pool.filter(b => b.kat === 'karbo').sort((a, b) => (b.kal / b.harga) - (a.kal / a.harga));
+      for (const b of karboPool) {
+        if (sisa < b.harga || keranjang.some(k => k.id === b.id)) continue;
+        const porsi = Math.min(Math.floor(sisa / b.harga), 2);
+        if (porsi <= 0) continue;
+        const hargaTotal = porsi * b.harga;
+        keranjang.push({ ...b, porsi, hargaTotal });
+        sisa -= hargaTotal; totalKal += b.kal * porsi; totalKarb += b.karb * porsi;
+        totalLem += b.lem * porsi; totalHarga += hargaTotal;
+      }
+
+      // Fase 3: Sayur & Buah
+      for (const b of pool.filter(b => b.kat === 'sayur' || b.kat === 'buah')) {
+        if (sisa < b.harga) continue;
+        keranjang.push({ ...b, porsi: 1, hargaTotal: b.harga });
+        sisa -= b.harga; totalKal += b.kal; totalHarga += b.harga;
+      }
+
+      return {
+        keranjang,
+        totalPro: Math.round(totalPro * 10) / 10,
+        totalKal: Math.round(totalKal),
+        totalKarb: Math.round(totalKarb * 10) / 10,
+        totalLem: Math.round(totalLem * 10) / 10,
+        totalHarga,
+        sisaBudget: budget - totalHarga,
+        tercapai: totalPro >= targetProtein * 0.85,
+      };
+    }
+
+    // Render halaman
+    el.innerHTML = `
+      <div class="page-header">
+        <h2><i class="fa fa-wallet" style="color:var(--g3)"></i> Kalkulator Anggaran Gizi</h2>
+        <p>Racik menu harian bergizi sesuai kantong — cocok untuk mahasiswa & calon Abdi Negara!</p>
+      </div>
+      <div style="display:grid;grid-template-columns:360px 1fr;gap:22px;align-items:start">
+
+        <!-- Panel Kiri: Input -->
+        <div class="card" style="position:sticky;top:80px;align-self:start;max-height:calc(100vh - 100px);overflow-y:auto">
+          <div class="card-header">
+            <div class="card-title"><div class="card-icon icon-green"><i class="fa fa-sliders"></i></div>Atur Parameter</div>
+          </div>
+          <div style="padding:0 4px 4px">
+            <div class="form-group" style="margin-bottom:18px">
+              <label class="form-label"><i class="fa fa-money-bill-wave" style="color:var(--g3);margin-right:6px"></i>Budget Harian</label>
+              <div style="position:relative">
+                <span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);font-weight:600;color:var(--muted);font-size:.9rem">Rp</span>
+                <input id="bg-budget" type="number" class="form-input" style="padding-left:38px;font-size:1.05rem;font-weight:600;color:var(--g2)" placeholder="Contoh: 30000" value="" min="5000" max="200000" step="1000"/>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+                ${[15000, 25000, 30000, 50000, 75000].map(v => `<button class="budget-preset" onclick="document.getElementById('bg-budget').value=${v}">Rp ${v.toLocaleString('id-ID')}</button>`).join('')}
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:18px">
+              <label class="form-label"><i class="fa fa-dumbbell" style="color:var(--g3);margin-right:6px"></i>Target Protein Harian</label>
+              <div style="position:relative">
+                <input id="bg-protein" type="number" class="form-input" style="padding-right:42px;font-size:1.05rem;font-weight:600;color:var(--g2)" placeholder="Contoh: 50" value="" min="20" max="200"/>
+                <span style="position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:.82rem;color:var(--muted)">gram</span>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+                <button class="budget-preset" onclick="document.getElementById('bg-protein').value=40">Ringan 40g</button>
+                <button class="budget-preset" onclick="document.getElementById('bg-protein').value=55">Sedang 55g</button>
+                <button class="budget-preset" onclick="document.getElementById('bg-protein').value=75">Aktif 75g</button>
+                <button class="budget-preset" onclick="document.getElementById('bg-protein').value=100">Atlet 100g</button>
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:22px">
+              <label class="form-label"><i class="fa fa-leaf" style="color:var(--g3);margin-right:6px"></i>Preferensi Makanan</label>
+              <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px">
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border-radius:10px;border:2px solid var(--g4);background:var(--bg);font-size:.88rem">
+                  <input type="radio" name="bg-pref" value="semua" checked style="accent-color:var(--g3)"/> <i class="fa fa-utensils" style="color:var(--g3)"></i> Semua (termasuk ayam & ikan)
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border-radius:10px;border:2px solid var(--border);background:var(--bg);font-size:.88rem">
+                  <input type="radio" name="bg-pref" value="ikan" style="accent-color:var(--g3)"/> <i class="fa fa-fish" style="color:var(--g3)"></i> Ikan & Nabati (tanpa ayam)
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 14px;border-radius:10px;border:2px solid var(--border);background:var(--bg);font-size:.88rem">
+                  <input type="radio" name="bg-pref" value="vegetarian" style="accent-color:var(--g3)"/> <i class="fa fa-seedling" style="color:var(--g3)"></i> Vegetarian (telur, tahu, tempe)
+                </label>
+              </div>
+            </div>
+            <button class="btn btn-primary" style="width:100%;font-size:1rem;padding:14px" onclick="hitungAnggaranGizi()">
+              <i class="fa fa-magic"></i> Racik Menu Hemat!
+            </button>
+          </div>
+        </div>
+
+        <!-- Panel Kanan: Hasil -->
+        <div>
+          <div id="bg-result" style="display:none">
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px" id="bg-summary"></div>
+            <div class="card" style="margin-bottom:20px" id="bg-protein-bar-card"></div>
+            <div class="card" style="margin-bottom:20px">
+              <div class="card-header">
+                <div class="card-title"><div class="card-icon icon-green"><i class="fa fa-shopping-basket"></i></div>Komposisi Menu Hari Ini</div>
+                <span id="bg-badge-hemat" class="status-badge"></span>
+              </div>
+              <div id="bg-keranjang"></div>
+            </div>
+            <div class="card" style="margin-bottom:20px">
+              <div class="card-header">
+                <div class="card-title"><div class="card-icon" style="background:#fef3c7;color:#d97706"><i class="fa fa-clock"></i></div>Saran Jadwal Makan</div>
+              </div>
+              <div id="bg-jadwal" style="padding:4px"></div>
+            </div>
+            <div class="card" id="bg-tips"></div>
+          </div>
+          <div id="bg-empty" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center">
+            <div style="font-size:3.5rem;color:var(--muted);margin-bottom:16px"><i class="fa fa-shopping-cart"></i></div>
+            <div style="font-weight:700;font-size:1.15rem;color:var(--text);margin-bottom:8px">Siap meracik menu hemat?</div>
+            <p style="color:var(--muted);font-size:.9rem;max-width:300px;line-height:1.6">Masukkan budget dan target protein di sebelah kiri, lalu klik <strong>Racik Menu Hemat!</strong></p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Update radio border on change
+    el.querySelectorAll('input[name="bg-pref"]').forEach(r => {
+      r.addEventListener('change', () => {
+        el.querySelectorAll('input[name="bg-pref"]').forEach(x => x.closest('label').style.borderColor = 'var(--border)');
+        r.closest('label').style.borderColor = 'var(--g4)';
+      });
+    });
+
+    window.hitungAnggaranGizi = () => {
+      const budgetVal = document.getElementById('bg-budget').value.trim();
+      const proteinVal = document.getElementById('bg-protein').value.trim();
+      if (!budgetVal || !proteinVal) {
+        toast('Silakan isi Budget Harian dan Target Protein terlebih dahulu!', 'warning');
+        return;
+      }
+      const budget = parseInt(budgetVal);
+      const targetProtein = parseInt(proteinVal);
+      const preferensi = document.querySelector('input[name="bg-pref"]:checked')?.value || 'semua';
+      if (budget < 5000) { toast('Budget minimal Rp 5.000', 'warning'); return; }
+      if (targetProtein < 10) { toast('Target protein minimal 10g', 'warning'); return; }
+      const hasil = optimasiAnggaranGizi(budget, targetProtein, preferensi);
+      renderHasil(hasil, budget, targetProtein);
+    };
+
+    function renderHasil(h, budget, targetProtein) {
+      document.getElementById('bg-empty').style.display = 'none';
+      document.getElementById('bg-result').style.display = 'block';
+
+      // Summary cards
+      const proteinPct = Math.min(100, Math.round((h.totalPro / targetProtein) * 100));
+      document.getElementById('bg-summary').innerHTML = [
+        { icon: 'fa-fire', label: 'Total Kalori', val: `${h.totalKal} kkal`, color: '#ef4444', bg: '#fef2f2' },
+        { icon: 'fa-drumstick-bite', label: 'Total Protein', val: `${h.totalPro}g`, color: '#7c3aed', bg: '#ede9fe' },
+        { icon: 'fa-receipt', label: 'Total Biaya', val: `Rp ${h.totalHarga.toLocaleString('id-ID')}`, color: '#d97706', bg: '#fef3c7' },
+        { icon: 'fa-piggy-bank', label: 'Sisa Budget', val: `Rp ${h.sisaBudget.toLocaleString('id-ID')}`, color: h.sisaBudget >= 0 ? '#15803d' : '#ef4444', bg: h.sisaBudget >= 0 ? '#f0fdf4' : '#fef2f2' },
+      ].map(s => `
+        <div class="stat-card" style="flex-direction:column;text-align:center;padding:16px 12px">
+          <div class="stat-icon" style="background:${s.bg};color:${s.color};margin:0 auto 10px"><i class="fa ${s.icon}"></i></div>
+          <div style="font-size:1rem;font-weight:700;color:${s.color}">${s.val}</div>
+          <div class="stat-label" style="margin-top:4px">${s.label}</div>
+        </div>`).join('');
+
+      // Protein progress bar
+      const barColor = proteinPct >= 100 ? '#15803d' : proteinPct >= 75 ? '#d97706' : '#ef4444';
+      const barMsg = proteinPct >= 100 ? '<i class="fa fa-check-circle"></i> Target protein tercapai!' : proteinPct >= 75 ? '<i class="fa fa-exclamation-triangle"></i> Mendekati target' : '<i class="fa fa-times-circle"></i> Target belum terpenuhi';
+      document.getElementById('bg-protein-bar-card').innerHTML = `
+        <div class="card-header">
+          <div class="card-title"><div class="card-icon" style="background:#ede9fe;color:#7c3aed"><i class="fa fa-bullseye"></i></div>Pencapaian Target Protein</div>
+          <span style="font-weight:700;color:${barColor}">${h.totalPro}g / ${targetProtein}g</span>
+        </div>
+        <div style="padding:0 4px 16px">
+          <div style="background:var(--border);border-radius:99px;height:16px;overflow:hidden;margin-bottom:8px">
+            <div style="height:100%;border-radius:99px;background:${barColor};width:${proteinPct}%;transition:width 1s ease;min-width:4px"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <span style="font-size:.85rem;color:${barColor};font-weight:600">${barMsg}</span>
+            <span style="font-size:.85rem;color:var(--muted)">${proteinPct}% terpenuhi</span>
+          </div>
+        </div>`;
+
+      // Keranjang belanja
+      const katColor = { protein: '#7c3aed', karbo: '#d97706', sayur: '#15803d', buah: '#e11d48', lainnya: '#3b82f6' };
+      const katBg = { protein: '#ede9fe', karbo: '#fef3c7', sayur: '#f0fdf4', buah: '#fff1f2', lainnya: '#eff6ff' };
+      document.getElementById('bg-keranjang').innerHTML = h.keranjang.length ? `
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;padding:4px">
+          ${h.keranjang.map(item => `
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg);border-radius:12px;border:1.5px solid var(--border)">
+              <div style="flex:1;min-width:0">
+                <div style="font-weight:600;font-size:.87rem;color:var(--text)">${item.nama}</div>
+                <div style="font-size:.74rem;color:var(--muted);margin-top:2px">${item.porsi} ${item.sat} · ${Math.round(item.pro * item.porsi * 10) / 10}g protein</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px">
+                  <span style="font-size:.72rem;background:${katBg[item.kat]};color:${katColor[item.kat]};padding:2px 7px;border-radius:99px;font-weight:600">${item.kat}</span>
+                  <span style="font-size:.82rem;font-weight:700;color:var(--g2)">Rp ${item.hargaTotal.toLocaleString('id-ID')}</span>
+                </div>
+              </div>
+            </div>`).join('')}
+        </div>
+        <div style="padding:12px 14px 6px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:.86rem;color:var(--muted)">
+          <span>${h.keranjang.length} item · ${h.keranjang.reduce((a, b) => a + b.porsi, 0)} porsi</span>
+          <span style="color:var(--g2);font-weight:700">Total: Rp ${h.totalHarga.toLocaleString('id-ID')}</span>
+        </div>` :
+        `<div class="empty-state"><div class="empty-icon"><i class="fa fa-shopping-cart"></i></div><div class="empty-title">Budget terlalu kecil</div></div>`;
+
+      const hemPct = Math.round((h.sisaBudget / budget) * 100);
+      document.getElementById('bg-badge-hemat').innerHTML = hemPct > 0 ? `<i class="fa fa-coins"></i> Hemat ${hemPct}%` : '<i class="fa fa-check-circle"></i> Budget optimal';
+      document.getElementById('bg-badge-hemat').className = `status-badge ${hemPct > 5 ? 'status-diterima' : 'status-pending'}`;
+
+      // Jadwal makan
+      const protein = h.keranjang.filter(k => k.kat === 'protein');
+      const karbo = h.keranjang.filter(k => k.kat === 'karbo');
+      const lain = h.keranjang.filter(k => k.kat === 'sayur' || k.kat === 'buah');
+      const slot = (icon, waktu, warna, items) => {
+        if (!items.length) return '';
+        return `<div style="display:flex;gap:14px;padding:13px;border-radius:12px;background:${warna};margin-bottom:10px;align-items:flex-start">
+          <div style="font-size:1.4rem;min-width:30px;text-align:center">${icon}</div>
+          <div><div style="font-weight:700;font-size:.88rem;margin-bottom:4px">${waktu}</div>
+          <div style="font-size:.82rem;color:var(--muted);line-height:1.7">${items.map(i => `${i.porsi > 1 ? i.porsi + '× ' : ''}${i.nama}`).join(' + ')}</div></div>
+        </div>`;
+      };
+      document.getElementById('bg-jadwal').innerHTML = `<div style="padding:4px 4px 10px">
+        ${slot('<i class="fa fa-sun" style="color:#d97706"></i>', 'Sarapan (06.00–08.00)', '#fef9c3', [...karbo.slice(0, 1), ...protein.slice(0, 1), ...lain.slice(0, 1)])}
+        ${slot('<i class="fa fa-utensils" style="color:#15803d"></i>', 'Makan Siang (11.00–13.00)', '#dcfce7', [...karbo.slice(1, 2), ...protein.slice(1, 3)])}
+        ${slot('<i class="fa fa-moon" style="color:#7c3aed"></i>', 'Makan Malam (17.00–19.00)', '#ede9fe', [...karbo.slice(2, 3), ...protein.slice(3,)])}
+        ${slot('<i class="fa fa-cookie-bite" style="color:#e11d48"></i>', 'Cemilan', '#fff1f2', lain.slice(1,))}
+      </div>`;
+
+      // Tips
+      const tips = [];
+      if (!h.tercapai) tips.push({ icon: '<i class="fa fa-lightbulb" style="color:#d97706"></i>', msg: `Target protein belum penuh. Coba naikkan budget atau turunkan target protein.` });
+      tips.push({ icon: '<i class="fa fa-egg" style="color:#7c3aed"></i>', msg: '<strong>Telur</strong> adalah sumber protein termurah per gram — tambahkan tiap hari!' });
+      tips.push({ icon: '<i class="fa fa-shopping-basket" style="color:#15803d"></i>', msg: 'Belanja di <strong>pasar tradisional</strong> bisa hemat 20–40% vs supermarket.' });
+      tips.push({ icon: '<i class="fa fa-clock" style="color:#2563eb"></i>', msg: '<strong>Meal prep</strong> hari Minggu: masak banyak sekaligus, simpan di kulkas, hemat waktu & uang.' });
+      if (h.totalKal < 1500) tips.push({ icon: '<i class="fa fa-bolt" style="color:#e11d48"></i>', msg: 'Kalori masih kurang dari 1500 kkal. Tambahkan <strong>nasi merah atau ubi</strong> untuk energi.' });
+      document.getElementById('bg-tips').innerHTML = `
+        <div class="card-header"><div class="card-title"><div class="card-icon" style="background:#fef3c7;color:#d97706"><i class="fa fa-lightbulb"></i></div>Tips Hemat & Bergizi</div></div>
+        <div style="padding:4px 4px 14px;display:flex;flex-direction:column;gap:8px">
+          ${tips.map(t => `<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 14px;background:var(--bg);border-radius:10px;border-left:3px solid var(--g4)">
+            <span style="font-size:1.1rem;min-width:22px">${t.icon}</span>
+            <p style="font-size:.84rem;color:var(--text);line-height:1.6;margin:0">${t.msg}</p>
+          </div>`).join('')}
+        </div>`;
+
+      document.getElementById('bg-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   },
 };
 
