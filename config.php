@@ -5,6 +5,8 @@ define('DB_PASS', '');
 define('DB_NAME', 'db_gizi');
 define('DB_PORT', 3306);
 
+define('GEMINI_API_KEY', getenv('GEMINI_API_KEY') ?: '');
+
 function getConnection() {
     $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT);
     if ($conn->connect_error) {

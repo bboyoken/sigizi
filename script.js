@@ -42,8 +42,10 @@ function openModal(title, body, footer = '', icon = '') {
   document.getElementById('modal-overlay').classList.add('show');
 }
 function closeModal(e) {
-  if (!e || e.target === document.getElementById('modal-overlay'))
+  if (!e || e.target === document.getElementById('modal-overlay')) {
+    stopLiveCamera();
     document.getElementById('modal-overlay').classList.remove('show');
+  }
 }
 
 function togglePwd(id) {
@@ -71,6 +73,109 @@ function kalBar(kal, max = 500) {
   const pct = Math.min(100, (kal / max) * 100);
   const col = kal > 300 ? '#ef4444' : kal > 150 ? '#f59e0b' : '#22c55e';
   return `<div class="kal-bar-wrap"><div class="kal-bar" style="width:${pct}%;background:${col}"></div></div>`;
+}
+
+// ─── LIVE CAMERA SCANNER ENGINE ─────────────────────────────────────────────
+let liveStream = null;
+let currentCameraFacing = 'environment'; // 'environment' (kamera belakang) atau 'user' (kamera depan)
+let pendingCameraCallback = null;
+
+async function openLiveCameraModal(onCaptureCallback) {
+  pendingCameraCallback = onCaptureCallback;
+  const cameraBody = `
+    <div class="camera-view-container">
+      <video id="live-camera-feed" class="camera-video-feed" autoplay playsinline></video>
+      <div class="camera-overlay-frame">
+        <div class="camera-status-pill"><i class="fa fa-circle" style="color:#22c55e; font-size:.6rem;"></i> Live Scanner Aktif</div>
+        <div class="camera-reticle">
+          <div class="camera-scanner-line"></div>
+          <div class="camera-reticle-corner corner-tl"></div>
+          <div class="camera-reticle-corner corner-tr"></div>
+          <div class="camera-reticle-corner corner-bl"></div>
+          <div class="camera-reticle-corner corner-br"></div>
+        </div>
+      </div>
+    </div>
+    <div id="camera-err-msg" style="margin-top:10px;"></div>
+    <canvas id="live-camera-canvas" style="display:none;"></canvas>
+  `;
+
+  const cameraFooter = `
+    <div class="camera-controls-bar" style="width:100%;">
+      <button class="btn btn-outline btn-sm" onclick="switchCameraFacing()"><i class="fa fa-sync"></i> Ganti Kamera</button>
+      <button class="btn-shutter" id="btn-snap-camera" onclick="captureLiveCameraFrame()"><i class="fa fa-camera"></i></button>
+      <button class="btn btn-danger btn-sm" onclick="stopLiveCamera(); closeModal();"><i class="fa fa-times"></i> Batal</button>
+    </div>
+  `;
+
+  openModal('Pemindai Kamera Langsung AI', cameraBody, cameraFooter, '<i class="fa fa-video" style="color:var(--g4)"></i>');
+  await initLiveCameraStream();
+}
+
+async function initLiveCameraStream() {
+  const videoEl = document.getElementById('live-camera-feed');
+  const errEl = document.getElementById('camera-err-msg');
+  if (!videoEl) return;
+
+  if (liveStream) {
+    liveStream.getTracks().forEach(track => track.stop());
+    liveStream = null;
+  }
+
+  try {
+    const constraints = {
+      video: {
+        facingMode: { ideal: currentCameraFacing },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      }
+    };
+    liveStream = await navigator.mediaDevices.getUserMedia(constraints);
+    videoEl.srcObject = liveStream;
+    if (errEl) errEl.innerHTML = '';
+  } catch (err) {
+    console.error("Camera error:", err);
+    if (errEl) {
+      errEl.innerHTML = `<div class="alert alert-danger" style="margin:0;"><i class="fa fa-exclamation-triangle"></i> Gagal membuka kamera. Izinkan akses kamera pada browser Anda.</div>`;
+    }
+  }
+}
+
+async function switchCameraFacing() {
+  currentCameraFacing = (currentCameraFacing === 'environment') ? 'user' : 'environment';
+  await initLiveCameraStream();
+}
+
+function captureLiveCameraFrame() {
+  const videoEl = document.getElementById('live-camera-feed');
+  const canvasEl = document.getElementById('live-camera-canvas');
+  if (!videoEl || !canvasEl) return;
+
+  if (videoEl.readyState < 2) {
+    toast('Kamera belum siap, tunggu sebentar...', 'warning');
+    return;
+  }
+
+  canvasEl.width = videoEl.videoWidth || 640;
+  canvasEl.height = videoEl.videoHeight || 480;
+  const ctx = canvasEl.getContext('2d');
+  ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+
+  const base64Image = canvasEl.toDataURL('image/jpeg', 0.85);
+
+  stopLiveCamera();
+  closeModal();
+
+  if (typeof pendingCameraCallback === 'function') {
+    pendingCameraCallback(base64Image);
+  }
+}
+
+function stopLiveCamera() {
+  if (liveStream) {
+    liveStream.getTracks().forEach(track => track.stop());
+    liveStream = null;
+  }
 }
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────────────────────
@@ -179,6 +284,7 @@ async function doLogout() {
 // ─── NAV ──────────────────────────────────────────────────────────────────────
 const userNav = [
   { id: 'katalog-gizi', icon: 'fa-bowl-food', label: 'Katalog Gizi' },
+  { id: 'ai-analyzer', icon: 'fa-wand-magic-sparkles', label: 'Analisis Gizi AI' },
   { id: 'kalkulator', icon: 'fa-calculator', label: 'Kalkulator' },
   { id: 'kalkulator-abdi', icon: 'fa-user-tie', label: 'Kalkulator Abdi Negara' },
   { id: 'budget-gizi', icon: 'fa-wallet', label: 'Anggaran Gizi' },
@@ -243,6 +349,7 @@ function navigateTo(page) {
     'log-admin': 'Log Aktivitas',
     'user-admin': 'Data Pengguna',
     'katalog-gizi': 'Katalog Gizi',
+    'ai-analyzer': 'Analisis Gizi AI (Teks & Foto)',
     'kalkulator': 'Kalkulator Gizi',
     'katalog-diet': 'Katalog Diet',
     'request-user': 'Request Makanan',
@@ -454,6 +561,19 @@ const pageRenderers = {
     const kats = ['Lauk pauk', 'Cemilan', 'Makanan utama', 'Buah', 'Appetizer'];
     const katOpts = kats.map(k => `<option value="${k}">${k}</option>`).join('');
     const mkForm = (data = {}) => `
+      <div style="background:linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%); border:1px solid #bae6fd; padding:12px; border-radius:12px; margin-bottom:14px;">
+        <div style="font-weight:700; font-size:.85rem; color:#0369a1; margin-bottom:6px;"><i class="fa fa-wand-magic-sparkles"></i> Auto-Fill Otomatis AI & Kamera</div>
+        <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+          <input class="form-input" id="mk-ai-prompt" placeholder="Ketik nama makanan (misal: Sate Ayam 5 tusuk)" style="background:#fff; font-size:.85rem; padding:6px 10px;"/>
+          <button class="btn btn-primary btn-sm" style="white-space:nowrap;" onclick="autoFillAiText()" id="btn-autofill-text"><i class="fa fa-magic"></i> AI Teks</button>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <button class="btn btn-success btn-sm" style="width:100%; font-size:.78rem;" onclick="openLiveCameraModal(autoFillFromCamera)" id="btn-autofill-cam"><i class="fa fa-video"></i> Kamera Langsung</button>
+          <button class="btn btn-outline btn-sm" style="width:100%; font-size:.78rem;" onclick="document.getElementById('mk-ai-file').click()" id="btn-autofill-img"><i class="fa fa-image"></i> Pilih File Foto</button>
+          <input type="file" id="mk-ai-file" accept="image/*" style="display:none;" onchange="autoFillAiImage(event)"/>
+        </div>
+        <div id="mk-ai-status" style="font-size:.78rem; color:var(--muted); margin-top:6px;"></div>
+      </div>
       <div class="form-group"><label class="form-label">Nama Makanan</label><input class="form-input" id="mk-nama" value="${data.nama_makanan || ''}" placeholder="Nama makanan"/></div>
       <div class="form-group"><label class="form-label">Kategori</label><select class="form-input form-select" id="mk-kat">${katOpts.replace(`value="${data.kategori || ''}"`, `value="${data.kategori || ''}" selected`)}</select></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
@@ -462,6 +582,74 @@ const pageRenderers = {
         <div class="form-group"><label class="form-label">Karbohidrat (g)</label><input class="form-input" id="mk-karb" type="number" step="0.1" value="${data.karbohidrat || 0}"/></div>
         <div class="form-group"><label class="form-label">Lemak (g)</label><input class="form-input" id="mk-lem" type="number" step="0.1" value="${data.lemak || 0}"/></div>
       </div><div id="mk-alert"></div>`;
+
+    window.autoFillFromCamera = async (base64) => {
+      const stat = document.getElementById('mk-ai-status');
+      if (stat) stat.innerHTML = `<i class="fa fa-spinner fa-spin"></i> AI sedang mendeteksi tangkapan kamera...`;
+      const apiKey = localStorage.getItem('sigizi_gemini_key') || '';
+      const res = await api('analyze_ai_image', 'POST', { image: base64, api_key: apiKey });
+      if (res.success && res.data) {
+        if (document.getElementById('mk-nama')) document.getElementById('mk-nama').value = res.data.nama_makanan || 'Hasil Kamera AI';
+        if (res.data.kategori && document.getElementById('mk-kat')) document.getElementById('mk-kat').value = res.data.kategori;
+        if (document.getElementById('mk-kal')) document.getElementById('mk-kal').value = res.data.kalori || 0;
+        if (document.getElementById('mk-pro')) document.getElementById('mk-pro').value = res.data.protein || 0;
+        if (document.getElementById('mk-karb')) document.getElementById('mk-karb').value = res.data.karbohidrat || 0;
+        if (document.getElementById('mk-lem')) document.getElementById('mk-lem').value = res.data.lemak || 0;
+        if (stat) stat.innerHTML = `<span style="color:var(--g3)"><i class="fa fa-check-circle"></i> Hasil kamera terdeteksi via ${res.source}!</span>`;
+        toast('Form berhasil diisi dari kamera!');
+      } else {
+        if (stat) stat.innerHTML = `<span style="color:var(--danger)">Gagal mendeteksi kamera AI</span>`;
+      }
+    };
+
+    window.autoFillAiText = async () => {
+      const q = document.getElementById('mk-ai-prompt').value.trim() || document.getElementById('mk-nama').value.trim();
+      if (!q) { toast('Ketikkan nama makanan terlebih dahulu', 'warning'); return; }
+      const stat = document.getElementById('mk-ai-status');
+      stat.innerHTML = `<i class="fa fa-spinner fa-spin"></i> AI sedang menganalisis nutrisi ${q}...`;
+      const apiKey = localStorage.getItem('sigizi_gemini_key') || '';
+      const res = await api('analyze_ai_text', 'POST', { nama_makanan: q, api_key: apiKey });
+      if (res.success && res.data) {
+        document.getElementById('mk-nama').value = res.data.nama_makanan || q;
+        if (res.data.kategori) document.getElementById('mk-kat').value = res.data.kategori;
+        document.getElementById('mk-kal').value = res.data.kalori || 0;
+        document.getElementById('mk-pro').value = res.data.protein || 0;
+        document.getElementById('mk-karb').value = res.data.karbohidrat || 0;
+        document.getElementById('mk-lem').value = res.data.lemak || 0;
+        stat.innerHTML = `<span style="color:var(--g3)"><i class="fa fa-check-circle"></i> Berhasil diisi otomatis via ${res.source}!</span>`;
+        toast('Form berhasil diisi otomatis!');
+      } else {
+        stat.innerHTML = `<span style="color:var(--danger)">Gagal menganalisis AI</span>`;
+      }
+    };
+
+    window.autoFillAiImage = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const stat = document.getElementById('mk-ai-status');
+      stat.innerHTML = `<i class="fa fa-spinner fa-spin"></i> Membaca foto...`;
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const base64 = evt.target.result;
+        stat.innerHTML = `<i class="fa fa-spinner fa-spin"></i> AI sedang mendeteksi foto makanan...`;
+        const apiKey = localStorage.getItem('sigizi_gemini_key') || '';
+        const res = await api('analyze_ai_image', 'POST', { image: base64, api_key: apiKey });
+        if (res.success && res.data) {
+          document.getElementById('mk-nama').value = res.data.nama_makanan || 'Hasil Foto AI';
+          if (res.data.kategori) document.getElementById('mk-kat').value = res.data.kategori;
+          document.getElementById('mk-kal').value = res.data.kalori || 0;
+          document.getElementById('mk-pro').value = res.data.protein || 0;
+          document.getElementById('mk-karb').value = res.data.karbohidrat || 0;
+          document.getElementById('mk-lem Old').value = res.data.lemak || 0;
+          document.getElementById('mk-lem').value = res.data.lemak || 0;
+          stat.innerHTML = `<span style="color:var(--g3)"><i class="fa fa-check-circle"></i> Foto berhasil terdeteksi via ${res.source}!</span>`;
+          toast('Form berhasil diisi otomatis dari foto!');
+        } else {
+          stat.innerHTML = `<span style="color:var(--danger)">Gagal mendeteksi foto AI</span>`;
+        }
+      };
+      reader.readAsDataURL(file);
+    };
 
     window.showAddMakanan = () => {
       openModal('Tambah Data Makanan', mkForm(), `<button class="btn btn-outline btn-sm" onclick="closeModal()">Batal</button><button class="btn btn-success btn-sm" onclick="saveMakanan()"><i class="fa fa-save"></i>Simpan</button>`, '<i class="fa fa-plus" style="color:var(--g3)"></i>');
@@ -503,14 +691,41 @@ const pageRenderers = {
         <tr><td class="td-center">${r.id_request}</td><td><strong>${r.nama_makanan_req}</strong></td><td>${statusBadge(r.status_request)}</td></tr>`).join('') : `<tr><td colspan="3" style="text-align:center;padding:30px;color:var(--muted)">Belum ada request</td></tr>`;
     };
     el.innerHTML = `
-      <div class="page-header"><h2><i class="fa fa-paper-plane" style="color:var(--g3)"></i>Request Makanan</h2><p>Ajukan request makanan baru ke admin</p></div>
-      <div style="display:grid;grid-template-columns:360px 1fr;gap:20px">
+      <div class="page-header"><h2><i class="fa fa-paper-plane" style="color:var(--g3)"></i>Request Makanan (Auto-ACC AI)</h2><p>Ajukan request makanan baru via teks atau unggah foto, AI akan mendeteksi & menyetujuinya secara otomatis!</p></div>
+      <div style="display:grid;grid-template-columns:380px 1fr;gap:20px">
         <div class="card">
-          <div class="card-header"><div class="card-title"><div class="card-icon icon-green"><i class="fa fa-plus"></i></div>Ajukan Request</div></div>
+          <div class="card-header"><div class="card-title"><div class="card-icon icon-green"><i class="fa fa-wand-magic-sparkles"></i></div>Ajukan Request (Instan AI)</div></div>
           <div id="req-alert"></div>
-          <div class="form-group"><label class="form-label">Nama Makanan yang Di-request</label><input class="form-input" id="req-nama" placeholder="Contoh: Gulai Kambing..."/></div>
-          <button class="btn btn-primary" onclick="sendRequest()"><i class="fa fa-paper-plane"></i>Kirim Request</button>
+          
+          <!-- Pilihan 1: Teks -->
+          <div class="form-group">
+            <label class="form-label"><i class="fa fa-font" style="color:var(--g3)"></i> Opsi 1: Nama Makanan</label>
+            <input class="form-input" id="req-nama" placeholder="Contoh: Gulai Kambing, Telur Balado..."/>
+          </div>
+
+          <div style="text-align:center; font-size:.8rem; color:var(--muted); margin:10px 0; position:relative;">
+            <span style="background:#fff; padding:0 8px; position:relative; z-index:1;">ATAU GUNAKAN FOTO</span>
+            <div style="border-bottom:1px dashed var(--border); position:absolute; top:50%; width:100%; left:0;"></div>
+          </div>
+
+          <!-- Pilihan 2: Kamera / Foto -->
+          <div class="form-group">
+            <label class="form-label"><i class="fa fa-camera" style="color:#d97706"></i> Opsi 2: Foto Makanan (Kamera Langsung / File)</label>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-success btn-sm" onclick="openLiveCameraModal(onReqCameraCapture)" style="width:100%;"><i class="fa fa-video"></i> Kamera Langsung</button>
+              <button class="btn btn-outline btn-sm" onclick="document.getElementById('req-foto-file').click()" style="width:100%;"><i class="fa fa-image"></i> Pilih File</button>
+              <input type="file" id="req-foto-file" accept="image/*" style="display:none;" onchange="previewReqFoto(event)"/>
+            </div>
+          </div>
+          <div id="req-foto-preview-wrap" style="display:none; text-align:center; margin-bottom:14px;">
+            <img id="req-foto-preview" style="max-height:140px; border-radius:10px; border:2px dashed var(--g4); object-fit:cover;" />
+          </div>
+
+          <button class="btn btn-primary" onclick="sendRequest()" id="btn-send-req" style="width:100%; margin-top:8px;">
+            <i class="fa fa-paper-plane"></i> Kirim & Auto-ACC AI
+          </button>
         </div>
+
         <div class="card">
           <div class="card-header"><div class="card-title"><div class="card-icon icon-amber"><i class="fa fa-list"></i></div>Riwayat Request Saya</div></div>
           <div class="table-wrap"><table>
@@ -520,11 +735,65 @@ const pageRenderers = {
         </div>
       </div>`;
     await load();
+
+    let reqImageBase64 = '';
+    window.onReqCameraCapture = (base64) => {
+      reqImageBase64 = base64;
+      document.getElementById('req-foto-preview').src = reqImageBase64;
+      document.getElementById('req-foto-preview-wrap').style.display = 'block';
+      toast('Foto dari kamera langsung berhasil diambil!');
+    };
+
+    window.previewReqFoto = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        reqImageBase64 = evt.target.result;
+        document.getElementById('req-foto-preview').src = reqImageBase64;
+        document.getElementById('req-foto-preview-wrap').style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    };
+
     window.sendRequest = async () => {
-      const nama = document.getElementById('req-nama').value.trim();
-      if (!nama) { showAlert('req-alert', 'Nama makanan wajib diisi'); return; }
+      let nama = document.getElementById('req-nama').value.trim();
+      const btn = document.getElementById('btn-send-req');
+
+      if (!nama && !reqImageBase64) {
+        showAlert('req-alert', 'Isi nama makanan atau unggah foto makanan terlebih dahulu!');
+        return;
+      }
+
+      btn.disabled = true;
+
+      // Jika user mengunggah foto makanan
+      if (reqImageBase64 && !nama) {
+        btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> AI Mendeteksi Foto...`;
+        const apiKey = localStorage.getItem('sigizi_gemini_key') || '';
+        const aiRes = await api('analyze_ai_image', 'POST', { image: reqImageBase64, api_key: apiKey });
+        if (aiRes.success && aiRes.data) {
+          nama = aiRes.data.nama_makanan || 'Makanan Terdeteksi Foto';
+        } else {
+          nama = 'Makanan Terdeteksi Foto';
+        }
+      }
+
+      btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> Memproses Auto-ACC...`;
       const r = await api('create_request', 'POST', { nama_makanan_req: nama });
-      if (r.success) { toast(r.message); document.getElementById('req-nama').value = ''; load(); } else showAlert('req-alert', r.message);
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa fa-paper-plane"></i> Kirim & Auto-ACC AI`;
+
+      if (r.success) {
+        toast(r.message);
+        document.getElementById('req-nama').value = '';
+        document.getElementById('req-foto-file').value = '';
+        document.getElementById('req-foto-preview-wrap').style.display = 'none';
+        reqImageBase64 = '';
+        load();
+      } else {
+        showAlert('req-alert', r.message);
+      }
     };
   },
 
@@ -682,10 +951,6 @@ const pageRenderers = {
     window.editRek = (id, kat, saran) => {
       openModal('Edit Rekomendasi', rekForm(decodeURIComponent(kat), decodeURIComponent(saran)), `<button class="btn btn-outline btn-sm" onclick="closeModal()">Batal</button><button class="btn btn-warning btn-sm" onclick="updateRek(${id})"><i class="fa fa-save"></i>Update</button>`, '<i class="fa fa-edit" style="color:var(--accent)"></i>');
     };
-    window.updateRek = async (id) => {
-      const r = await api('update_rekomendasi', 'PUT', { id_rekomendasi: id, kategori_bmi: document.getElementById('rek-kat').value, saran_diet: document.getElementById('rek-saran').value });
-      if (r.success) { toast(r.message); closeModal(); load(); } else showAlert('rek-alert', r.message);
-    };
     window.delRek = (id) => {
       confirm('Hapus Rekomendasi', 'Yakin ingin menghapus rekomendasi ini?', '🗑️', async () => {
         const r = await api('delete_rekomendasi', 'DELETE', { id });
@@ -693,6 +958,291 @@ const pageRenderers = {
       });
     };
   },
+
+  // ── ANALISIS GIZI AI ──────────────────────────────────────────────────────
+  'ai-analyzer': async (el) => {
+    el.innerHTML = `
+      <div class="page-header">
+        <h2><i class="fa fa-wand-magic-sparkles" style="color:var(--g3)"></i>Analisis Gizi AI (Kamera Langsung & Teks)</h2>
+        <p>Pindai langsung via kamera atau ketikkan nama makanan untuk menganalisis protein, kalori, & makronutrisi secara presisi!</p>
+      </div>
+
+      <!-- Optional API Key Input Banner -->
+      <div class="card" style="margin-bottom:20px; background:linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%); border:1px solid #bae6fd;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <div style="width:36px; height:36px; border-radius:50%; background:#0284c7; color:#fff; display:flex; align-items:center; justify-content:center; font-size:1.1rem;">
+              <i class="fa fa-key"></i>
+            </div>
+            <div>
+              <div style="font-weight:700; font-size:.9rem; color:#0369a1;">Google Gemini API Key (Opsional)</div>
+              <div style="font-size:.78rem; color:#0284c7;">Masukkan API Key untuk analisis visual Gemini Cloud murni. Jika kosong, sistem menggunakan Smart Clinical Engine internal.</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; width:100%; max-width:380px;">
+            <input class="form-input" id="ai-api-key-input" type="password" placeholder="AI API Key (AIzaSy...)" style="font-size:.85rem; padding:8px 12px;" />
+            <button class="btn btn-primary btn-sm" onclick="saveAiKey()" style="white-space:nowrap;"><i class="fa fa-save"></i> Simpan Key</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap:20px; margin-bottom:24px;">
+        
+        <!-- PEMINDAI KAMERA LANGSUNG -->
+        <div class="card" style="border:2px solid var(--g4); background:linear-gradient(160deg, #ffffff 0%, #f0fdf4 100%);">
+          <div class="card-header">
+            <div class="card-title">
+              <div class="card-icon" style="background:#dcfce7; color:var(--g3);"><i class="fa fa-video"></i></div>
+              Pindai Kamera Langsung
+            </div>
+          </div>
+          <p style="font-size:.82rem; color:var(--muted); margin-bottom:14px;">Buka kamera langsung perangkat Anda untuk menangkap foto hidangan secara instant tanpa perlu upload manual file.</p>
+          <button class="btn btn-success" onclick="openLiveCameraModal(doCameraAiAnalyze)" id="btn-ai-live-cam" style="width:100%; font-size:.95rem; padding:12px;">
+            <i class="fa fa-video"></i> Buka Kamera Langsung AI
+          </button>
+        </div>
+
+        <!-- ANALISIS FOTO FILE -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <div class="card-icon icon-amber"><i class="fa fa-image"></i></div>
+              Unggah File Foto Makanan
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:10px;">
+            <input class="form-input" type="file" id="ai-image-input" accept="image/*" onchange="previewAiImage(event)"/>
+          </div>
+          <div id="ai-image-preview-wrap" style="display:none; text-align:center; margin-bottom:14px; position:relative;">
+            <img id="ai-image-preview" style="max-height:140px; border-radius:12px; object-fit:cover; border:2px dashed var(--g4);" />
+          </div>
+          <button class="btn btn-outline" onclick="doAiImageAnalyze()" id="btn-ai-image" style="width:100%;">
+            <i class="fa fa-camera-retro"></i> Deteksi File Foto
+          </button>
+        </div>
+
+        <!-- ANALISIS TEKS -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <div class="card-icon icon-green"><i class="fa fa-keyboard"></i></div>
+              Analisis Makanan Teks
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:10px;">
+            <input class="form-input" id="ai-text-input" placeholder="Contoh: 100g Dada Ayam Panggang, 2 Telur Rebus..." onkeydown="if(event.key==='Enter') doAiTextAnalyze()"/>
+          </div>
+          <button class="btn btn-primary" onclick="doAiTextAnalyze()" id="btn-ai-text" style="width:100%;">
+            <i class="fa fa-wand-magic-sparkles"></i> Analisis Kandungan Teks
+          </button>
+        </div>
+
+      </div>
+
+      <!-- CONTAINER HASIL ANALISIS -->
+      <div id="ai-result-card" class="card" style="display:none; transition: all 0.3s ease;">
+        <div class="card-header" style="border-bottom:1px solid var(--border); padding-bottom:12px;">
+          <div class="card-title">
+            <div class="card-icon" style="background:#ede9fe; color:#7c3aed"><i class="fa fa-sparkles"></i></div>
+            Hasil Analisis Nutrisi Presisi
+          </div>
+          <span id="ai-source-badge" class="badge" style="background:#dcfce7; color:var(--g3); font-weight:600;">-</span>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 2fr; gap:20px; margin-top:16px;" id="ai-result-grid">
+          <!-- Summary Box -->
+          <div style="background:var(--bg); padding:20px; border-radius:14px; border:1px solid var(--border); text-align:center;">
+            <div style="font-size:2.5rem; margin-bottom:6px;">🍲</div>
+            <h3 id="res-ai-nama" style="font-size:1.2rem; color:var(--text); margin-bottom:6px;">-</h3>
+            <span id="res-ai-kat" class="cat-badge cat-utama" style="margin-bottom:8px; display:inline-block;">-</span>
+            <div id="res-ai-porsi" style="font-size:.78rem; color:var(--muted); font-weight:600; margin-bottom:12px;"><i class="fa fa-weight-hanging"></i> -</div>
+            
+            <div style="background:#fff; padding:12px; border-radius:10px; border:1px solid var(--border);">
+              <div style="font-size:.8rem; color:var(--muted);">Total Energi</div>
+              <div style="font-size:1.6rem; font-weight:700; color:#ef4444;" id="res-ai-kal">0 <span style="font-size:.9rem">kcal</span></div>
+            </div>
+          </div>
+
+          <!-- Detail Nutrisi -->
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <h4 style="color:var(--text); margin:0;"><i class="fa fa-chart-simple" style="color:var(--g3); margin-right:6px;"></i>Rincian Nutrisi & Protein Presisi</h4>
+              <span id="res-ai-protein-badge"></span>
+            </div>
+            
+            <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; margin-bottom:16px;">
+              <div style="background:#fef3c7; padding:10px 8px; border-radius:12px; text-align:center; border:1px solid #fde68a;">
+                <div style="font-size:.75rem; color:#b45309; font-weight:700;"><i class="fa fa-drumstick-bite"></i> Protein</div>
+                <div style="font-size:1.3rem; font-weight:800; color:#92400e; margin-top:2px;" id="res-ai-pro">0g</div>
+              </div>
+              <div style="background:#e0f2fe; padding:10px 8px; border-radius:12px; text-align:center; border:1px solid #bae6fd;">
+                <div style="font-size:.75rem; color:#0369a1; font-weight:700;"><i class="fa fa-bread-slice"></i> Karbo</div>
+                <div style="font-size:1.3rem; font-weight:800; color:#075985; margin-top:2px;" id="res-ai-karb">0g</div>
+              </div>
+              <div style="background:#fee2e2; padding:10px 8px; border-radius:12px; text-align:center; border:1px solid #fecaca;">
+                <div style="font-size:.75rem; color:#b91c1c; font-weight:700;"><i class="fa fa-cheese"></i> Lemak</div>
+                <div style="font-size:1.3rem; font-weight:800; color:#991b1b; margin-top:2px;" id="res-ai-lem">0g</div>
+              </div>
+              <div style="background:#dcfce7; padding:10px 8px; border-radius:12px; text-align:center; border:1px solid #86efac;">
+                <div style="font-size:.75rem; color:#15803d; font-weight:700;"><i class="fa fa-leaf"></i> Serat</div>
+                <div style="font-size:1.3rem; font-weight:800; color:#166534; margin-top:2px;" id="res-ai-serat">0g</div>
+              </div>
+            </div>
+
+            <div style="background:#f8fafc; padding:14px; border-radius:12px; border-left:4px solid var(--g3); margin-bottom:16px;">
+              <div style="font-size:.82rem; font-weight:700; color:var(--text); margin-bottom:4px;"><i class="fa fa-info-circle"></i> Catatan & Profil Gizi AI</div>
+              <p id="res-ai-desk" style="font-size:.85rem; color:var(--muted); line-height:1.6; margin:0;">-</p>
+            </div>
+
+            <!-- Tombol simpan langsung ke katalog makanan (opsional admin) atau request -->
+            <div style="display:flex; gap:10px; justify-content:flex-end;" id="ai-action-btns"></div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Load saved API Key if any
+    const savedKey = localStorage.getItem('sigizi_gemini_key') || '';
+    if (savedKey) {
+      document.getElementById('ai-api-key-input').value = savedKey;
+    }
+
+    window.saveAiKey = () => {
+      const k = document.getElementById('ai-api-key-input').value.trim();
+      localStorage.setItem('sigizi_gemini_key', k);
+      toast('API Key berhasil disimpan!');
+    };
+
+    let selectedImageBase64 = '';
+
+    window.previewAiImage = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        selectedImageBase64 = evt.target.result;
+        document.getElementById('ai-image-preview').src = selectedImageBase64;
+        document.getElementById('ai-image-preview-wrap').style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    };
+
+    window.doCameraAiAnalyze = async (base64) => {
+      selectedImageBase64 = base64;
+      document.getElementById('ai-image-preview').src = selectedImageBase64;
+      document.getElementById('ai-image-preview-wrap').style.display = 'block';
+      await doAiImageAnalyze();
+    };
+
+    window.doAiTextAnalyze = async () => {
+      const text = document.getElementById('ai-text-input').value.trim();
+      if (!text) {
+        toast('Ketikkan nama atau deskripsi makanan terlebih dahulu', 'warning');
+        return;
+      }
+      const btn = document.getElementById('btn-ai-text');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> Menganalisis...`;
+
+      try {
+        const apiKey = localStorage.getItem('sigizi_gemini_key') || '';
+        const res = await api('analyze_ai_text', 'POST', { nama_makanan: text, api_key: apiKey });
+        if (res.success && res.data) {
+          renderAiResult(res.data, res.source);
+        } else {
+          toast(res.message || 'Gagal menganalisis makanan', 'error');
+        }
+      } catch (err) {
+        toast('Terjadi kesalahan koneksi', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    };
+
+    window.doAiImageAnalyze = async () => {
+      if (!selectedImageBase64) {
+        toast('Pilih atau foto makanan terlebih dahulu', 'warning');
+        return;
+      }
+      const btn = document.getElementById('btn-ai-image');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> Mendeteksi Foto...`;
+
+      try {
+        const apiKey = localStorage.getItem('sigizi_gemini_key') || '';
+        const res = await api('analyze_ai_image', 'POST', { image: selectedImageBase64, api_key: apiKey });
+        if (res.success && res.data) {
+          renderAiResult(res.data, res.source);
+        } else {
+          toast(res.message || 'Gagal mengenali foto makanan', 'error');
+        }
+      } catch (err) {
+        toast('Terjadi kesalahan analisis foto', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    };
+
+    function renderAiResult(d, source) {
+      document.getElementById('ai-result-card').style.display = 'block';
+      document.getElementById('ai-source-badge').textContent = 'Engine: ' + source;
+      document.getElementById('res-ai-nama').textContent = d.nama_makanan || '-';
+      document.getElementById('res-ai-kat').textContent = d.kategori || 'Makanan utama';
+      document.getElementById('res-ai-porsi').innerHTML = `<i class="fa fa-weight-hanging"></i> Porsi: ${d.ukuran_porsi || '1 Porsi Standar (~100g)'}`;
+      document.getElementById('res-ai-kal').innerHTML = `${parseFloat(d.kalori || 0).toFixed(1)} <span style="font-size:.9rem">kcal</span>`;
+      
+      const proVal = parseFloat(d.protein || 0);
+      document.getElementById('res-ai-pro').textContent = `${proVal.toFixed(1)}g`;
+      document.getElementById('res-ai-karb').textContent = `${parseFloat(d.karbohidrat || 0).toFixed(1)}g`;
+      document.getElementById('res-ai-lem').textContent = `${parseFloat(d.lemak || 0).toFixed(1)}g`;
+      document.getElementById('res-ai-serat').textContent = `${parseFloat(d.serat || 0).toFixed(1)}g`;
+      document.getElementById('res-ai-desk').textContent = d.deskripsi || 'Tidak ada deskripsi tambahan.';
+
+      // Protein Density Badge
+      const pBadgeEl = document.getElementById('res-ai-protein-badge');
+      if (proVal >= 18) {
+        pBadgeEl.innerHTML = `<span class="protein-badge-high"><i class="fa fa-bolt"></i> Tinggi Protein (${proVal.toFixed(1)}g)</span>`;
+      } else if (proVal >= 8) {
+        pBadgeEl.innerHTML = `<span class="protein-badge-mid"><i class="fa fa-star"></i> Sumber Protein (${proVal.toFixed(1)}g)</span>`;
+      } else {
+        pBadgeEl.innerHTML = `<span class="badge" style="background:#f1f5f9; color:#475569;">Protein Rendah (${proVal.toFixed(1)}g)</span>`;
+      }
+
+      // Action buttons
+      let actHtml = '';
+      if (currentUser && currentUser.role === 'admin') {
+        actHtml = `<button class="btn btn-success btn-sm" onclick="quickSaveAiMakanan('${(d.nama_makanan || '').replace(/'/g, "\\'")}', '${d.kategori}', ${d.kalori}, ${d.protein}, ${d.karbohidrat}, ${d.lemak})"><i class="fa fa-plus-circle"></i> Tambah ke Katalog Gizi</button>`;
+      } else {
+        actHtml = `<button class="btn btn-primary btn-sm" onclick="quickRequestAiMakanan('${(d.nama_makanan || '').replace(/'/g, "\\'")}')"><i class="fa fa-paper-plane"></i> Request Tambah ke Katalog</button>`;
+      }
+      document.getElementById('ai-action-btns').innerHTML = actHtml;
+
+      document.getElementById('ai-result-card').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    window.quickSaveAiMakanan = async (nama, kat, kal, pro, karb, lem) => {
+    const payload = { nama_makanan: nama, kategori: kat, kalori: kal, protein: pro, karbohidrat: karb, lemak: lem };
+    const r = await api('create_makanan', 'POST', payload);
+    if (r.success) {
+      toast(`Makanan "${nama}" berhasil disimpan ke katalog!`);
+    } else {
+      toast(r.message, 'error');
+    }
+  };
+
+  window.quickRequestAiMakanan = async (nama) => {
+    const r = await api('create_request', 'POST', { nama_makanan_req: nama });
+    if (r.success) {
+      toast(`Request untuk "${nama}" berhasil diajukan!`);
+    } else {
+      toast(r.message, 'error');
+    }
+  };
+},
 
   // ── KALKULATOR ────────────────────────────────────────────────────────────
   'kalkulator': async (el) => {
@@ -784,9 +1334,9 @@ const pageRenderers = {
     };
   },
 
-  // ── KALKULATOR ABDI NEGARA ────────────────────────────────────────────────
-  'kalkulator-abdi': async (el) => {
-    el.innerHTML = `
+    // ── KALKULATOR ABDI NEGARA ────────────────────────────────────────────────
+    'kalkulator-abdi': async (el) => {
+      el.innerHTML = `
       <div class="page-header">
         <h2><i class="fa fa-user-tie" style="color:var(--g3)"></i> Kalkulator Abdi Negara</h2>
         <p>Cek berat badan ideal & kelayakan tinggi badan untuk menjadi Abdi Negara</p>
@@ -822,35 +1372,35 @@ const pageRenderers = {
         </div>
       </div>`;
 
-    window.setGenderAbdi = (g) => {
-      document.getElementById('abdi-gender').value = g;
-      document.getElementById('abdi-gen-L').classList.toggle('active', g === 'L');
-      document.getElementById('abdi-gen-P').classList.toggle('active', g === 'P');
-    };
+      window.setGenderAbdi = (g) => {
+        document.getElementById('abdi-gender').value = g;
+        document.getElementById('abdi-gen-L').classList.toggle('active', g === 'L');
+        document.getElementById('abdi-gen-P').classList.toggle('active', g === 'P');
+      };
 
-    window.hitungAbdi = () => {
-      const g = document.getElementById('abdi-gender').value;
-      const tb = parseFloat(document.getElementById('abdi-tb').value);
-      const bba = parseFloat(document.getElementById('abdi-bb').value);
-      if (!tb || !bba) { toast('Isi semua data terlebih dahulu', 'warning'); return; }
+      window.hitungAbdi = () => {
+        const g = document.getElementById('abdi-gender').value;
+        const tb = parseFloat(document.getElementById('abdi-tb').value);
+        const bba = parseFloat(document.getElementById('abdi-bb').value);
+        if (!tb || !bba) { toast('Isi semua data terlebih dahulu', 'warning'); return; }
 
-      const minTinggi = g === 'L' ? 165 : 160;
-      const labelGender = g === 'L' ? 'Laki-laki' : 'Perempuan';
-      const tinggiOK = tb >= minTinggi;
+        const minTinggi = g === 'L' ? 165 : 160;
+        const labelGender = g === 'L' ? 'Laki-laki' : 'Perempuan';
+        const tinggiOK = tb >= minTinggi;
 
-      // ── Hitung BBI ──
-      const bbi = Math.round((g === 'L' ? (tb - 100) * 0.9 : tb - 110) * 10) / 10;
-      const bbiMin = Math.round(bbi * 0.9 * 10) / 10;
-      const bbiMax = Math.round(bbi * 1.1 * 10) / 10;
-      const selisih = Math.round((bba - bbi) * 10) / 10;
-      const isIdeal = bba >= bbiMin && bba <= bbiMax;
-      const isOver = bba > bbiMax;
+        // ── Hitung BBI ──
+        const bbi = Math.round((g === 'L' ? (tb - 100) * 0.9 : tb - 110) * 10) / 10;
+        const bbiMin = Math.round(bbi * 0.9 * 10) / 10;
+        const bbiMax = Math.round(bbi * 1.1 * 10) / 10;
+        const selisih = Math.round((bba - bbi) * 10) / 10;
+        const isIdeal = bba >= bbiMin && bba <= bbiMax;
+        const isOver = bba > bbiMax;
 
-      let html = '';
+        let html = '';
 
-      // ── Blok 1: Status Tinggi ──
-      if (!tinggiOK) {
-        html += `<div style="background:#fef2f2;border:2px solid #fecaca;border-radius:12px;padding:20px;margin-bottom:16px;">
+        // ── Blok 1: Status Tinggi ──
+        if (!tinggiOK) {
+          html += `<div style="background:#fef2f2;border:2px solid #fecaca;border-radius:12px;padding:20px;margin-bottom:16px;">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
             <span style="font-size:2.2rem">📏</span>
             <div>
@@ -870,41 +1420,41 @@ const pageRenderers = {
             </ul>
           </div>
         </div>`;
-      } else {
-        html += `<div style="background:#f0fdf4;border:2px solid #bbf7d0;border-radius:12px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+        } else {
+          html += `<div style="background:#f0fdf4;border:2px solid #bbf7d0;border-radius:12px;padding:16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
           <span style="font-size:2rem">✅</span>
           <div>
             <div style="font-weight:700;color:#166534">Tinggi Badan Sudah Memenuhi Syarat</div>
             <div style="font-size:.84rem;color:#15803d">Tinggi Anda <strong>${tb} cm</strong> — melampaui syarat minimum <strong>${minTinggi} cm</strong> untuk ${labelGender}</div>
           </div>
         </div>`;
-      }
+        }
 
-      // ── Blok 2: Status Berat Badan ──
-      let bbIcon, bbTitle, bbColor, bgCol, borderCol, saranList;
-      if (isIdeal) {
-        bbIcon = '⚖️'; bbTitle = 'Berat Badan IDEAL'; bbColor = '#166534'; bgCol = '#f0fdf4'; borderCol = '#bbf7d0';
-        saranList = `<li>Pertahankan pola makan seimbang bergizi setiap hari</li>
+        // ── Blok 2: Status Berat Badan ──
+        let bbIcon, bbTitle, bbColor, bgCol, borderCol, saranList;
+        if (isIdeal) {
+          bbIcon = '⚖️'; bbTitle = 'Berat Badan IDEAL'; bbColor = '#166534'; bgCol = '#f0fdf4'; borderCol = '#bbf7d0';
+          saranList = `<li>Pertahankan pola makan seimbang bergizi setiap hari</li>
           <li>Tetap aktif berolahraga minimal <strong>30 menit/hari</strong></li>
           <li>Cek kesehatan rutin agar kondisi tubuh tetap prima</li>
           <li>Konsumsi buah dan sayur beragam setiap harinya</li>`;
-      } else if (isOver) {
-        bbIcon = '⬆️'; bbTitle = `Berat Badan BERLEBIH (+${Math.abs(selisih)} kg dari BBI)`; bbColor = '#b45309'; bgCol = '#fef3c7'; borderCol = '#fde68a';
-        saranList = `<li>Kurangi konsumsi karbohidrat sederhana: nasi putih, gula, tepung, minuman manis</li>
+        } else if (isOver) {
+          bbIcon = '⬆️'; bbTitle = `Berat Badan BERLEBIH (+${Math.abs(selisih)} kg dari BBI)`; bbColor = '#b45309'; bgCol = '#fef3c7'; borderCol = '#fde68a';
+          saranList = `<li>Kurangi konsumsi karbohidrat sederhana: nasi putih, gula, tepung, minuman manis</li>
           <li>Perbanyak sayuran hijau, buah, dan protein tanpa lemak (ayam, ikan, tahu)</li>
           <li>Olahraga kardio rutin: <strong>jogging, bersepeda, renang</strong> minimal 30 menit/hari</li>
           <li>Minum minimal <strong>2 liter air putih</strong> per hari untuk mempercepat metabolisme</li>
           <li>Hindari makan malam setelah pukul 20.00 dan cemilan berkalori tinggi</li>`;
-      } else {
-        bbIcon = '⬇️'; bbTitle = `Berat Badan KURANG (${Math.abs(selisih)} kg di bawah BBI)`; bbColor = '#1d4ed8'; bgCol = '#eff6ff'; borderCol = '#bfdbfe';
-        saranList = `<li>Tingkatkan asupan kalori bertahap melalui makanan bergizi padat nutrisi</li>
+        } else {
+          bbIcon = '⬇️'; bbTitle = `Berat Badan KURANG (${Math.abs(selisih)} kg di bawah BBI)`; bbColor = '#1d4ed8'; bgCol = '#eff6ff'; borderCol = '#bfdbfe';
+          saranList = `<li>Tingkatkan asupan kalori bertahap melalui makanan bergizi padat nutrisi</li>
           <li>Konsumsi protein tinggi: <strong>daging sapi, telur, tahu, tempe, kacang-kacangan</strong></li>
           <li>Makan <strong>5–6 kali sehari</strong> dalam porsi lebih kecil tapi teratur</li>
           <li>Olahraga <strong>angkat beban</strong> ringan untuk membentuk dan menambah massa otot</li>
           <li>Konsultasi dengan ahli gizi untuk program penambahan berat badan yang aman</li>`;
-      }
+        }
 
-      html += `<div style="background:${bgCol};border:2px solid ${borderCol};border-radius:12px;padding:20px;margin-bottom:16px;">
+        html += `<div style="background:${bgCol};border:2px solid ${borderCol};border-radius:12px;padding:20px;margin-bottom:16px;">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
           <span style="font-size:2.2rem">${bbIcon}</span>
           <div>
@@ -932,47 +1482,47 @@ const pageRenderers = {
         </div>
       </div>`;
 
-      // ── Blok 3: Kesimpulan ──
-      const layak = tinggiOK && isIdeal;
-      html += `<div style="background:${layak ? 'linear-gradient(135deg,var(--g2),var(--g3))' : 'linear-gradient(135deg,#374151,#4b5563)'};border-radius:12px;padding:22px;text-align:center;color:#fff;">
+        // ── Blok 3: Kesimpulan ──
+        const layak = tinggiOK && isIdeal;
+        html += `<div style="background:${layak ? 'linear-gradient(135deg,var(--g2),var(--g3))' : 'linear-gradient(135deg,#374151,#4b5563)'};border-radius:12px;padding:22px;text-align:center;color:#fff;">
         <div style="font-size:2.5rem;margin-bottom:8px">${layak ? '🏆' : '📋'}</div>
         <div style="font-weight:700;font-size:1.05rem;margin-bottom:6px">${layak ? 'SELAMAT! Anda Berpotensi Layak Menjadi Abdi Negara 🎉' : 'Perlu Perbaikan Sebelum Mendaftar sebagai Abdi Negara'}</div>
         <div style="font-size:.85rem;opacity:.85;line-height:1.6">${layak ? 'Tinggi dan berat badan Anda sudah memenuhi kriteria ideal. Jaga terus kondisi tubuh Anda!' : 'Perhatikan saran-saran di atas dan lakukan perbaikan secara konsisten. Kamu pasti bisa! 💪'}</div>
       </div>`;
 
-      const resEl = document.getElementById('abdi-result');
-      resEl.innerHTML = html;
-      resEl.style.display = 'block';
-      resEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    };
-  },
+        const resEl = document.getElementById('abdi-result');
+        resEl.innerHTML = html;
+        resEl.style.display = 'block';
+        resEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      };
+    },
 
-  // ── KATALOG DIET ──────────────────────────────────────────────────────────
-  'katalog-diet': async (el) => {
-    const diets = [
-      {
-        emoji: '⏰', name: 'Intermittent Fasting', color: '#1e3a5f', short: 'Pola makan siklus puasa dan makan untuk mengoptimalkan metabolisme tubuh.',
-        detail: [['Pengertian', 'Metode pengaturan pola makan yang berfokus pada siklus kapan Anda makan dan kapan Anda berpuasa.'], ['Aturan Makan', 'Populer dengan metode 16:8 (16 jam puasa, 8 jam makan). Saat puasa hanya boleh air putih, kopi/teh tanpa gula.'], ['Contoh Menu', 'Buka puasa: Dada ayam panggang, nasi merah, brokoli.\nCemilan: Buah apel segar atau segenggam almond.\nPenutup: Telur rebus dan salad sayur.'], ['Manfaat', 'Memperbaiki sensitivitas insulin.\nMembantu regenerasi sel (Autofagi).\nEfektif menurunkan berat badan.']]
-      },
-      {
-        emoji: '🔥', name: 'Cutting', color: '#5c1a1a', short: 'Fase memangkas lemak tubuh sambil mempertahankan massa otot.',
-        detail: [['Pengertian', 'Fase memangkas kadar lemak tubuh sebanyak mungkin sambil mempertahankan massa otot.'], ['Aturan Makan', 'Defisit Kalori (kurangi 300-500 kalori dari TDEE).\nProtein tinggi untuk mencegah penyusutan otot.\nWajib diimbangi angkat beban (weightlifting).'], ['Contoh Menu', 'Sarapan: Putih telur rebus dan secangkir oatmeal.\nMakan siang: Dada ayam panggang dan ubi jalar.\nMakan malam: Ikan nila bakar dan bayam rebus.'], ['Manfaat', 'Menurunkan risiko penyakit kardiovaskular.\nTubuh lebih ringan dan definisi otot lebih tajam.']]
-      },
-      {
-        emoji: '💪', name: 'Bulking', color: '#1a4a1a', short: 'Fase peningkatan massa otot melalui surplus kalori yang terstruktur.',
-        detail: [['Pengertian', 'Fase peningkatan massa otot dan berat badan secara sengaja melalui pola makan berlebih yang terstruktur.'], ['Aturan Makan', 'Surplus Kalori (tambah 300-500 kalori dari TDEE).\nMengutamakan karbohidrat kompleks & protein tinggi.\nFokus pada latihan beban progresif.'], ['Contoh Menu', 'Sarapan: Telur dadar, roti gandum, selai kacang.\nMakan siang: Nasi porsi besar, daging sapi, tempe.\nMinuman: Susu full cream atau protein shake.'], ['Manfaat', 'Meningkatkan kekuatan fisik dan daya tahan tulang.\nMemperbaiki BMR (metabolisme pembakaran kalori).']]
-      },
-      {
-        emoji: '🥑', name: 'Ketogenik', color: '#3a1a4a', short: 'Diet sangat rendah karbohidrat dan tinggi lemak untuk memicu ketosis.',
-        detail: [['Pengertian', 'Diet sangat rendah karbohidrat dan tinggi lemak untuk mengubah sumber energi utama tubuh ke lemak.'], ['Aturan Makan', 'Target: 70% Lemak, 20-25% Protein, 5% Karbohidrat.\nKarbohidrat dibatasi maksimal 20-50 gram/hari.\nMemancing fase "Ketosis" dalam tubuh.'], ['Contoh Menu', 'Sarapan: Telur orak-arik dimasak dengan mentega.\nMakan siang: Salmon panggang, alpukat, dan keju.\nMakan malam: Daging iga berlemak & sayur hijau.'], ['Manfaat', 'Sangat cepat untuk menurunkan berat badan.\nMenstabilkan kadar gula darah dan insulin.']]
-      },
-    ];
+      // ── KATALOG DIET ──────────────────────────────────────────────────────────
+      'katalog-diet': async (el) => {
+        const diets = [
+          {
+            emoji: '⏰', name: 'Intermittent Fasting', color: '#1e3a5f', short: 'Pola makan siklus puasa dan makan untuk mengoptimalkan metabolisme tubuh.',
+            detail: [['Pengertian', 'Metode pengaturan pola makan yang berfokus pada siklus kapan Anda makan dan kapan Anda berpuasa.'], ['Aturan Makan', 'Populer dengan metode 16:8 (16 jam puasa, 8 jam makan). Saat puasa hanya boleh air putih, kopi/teh tanpa gula.'], ['Contoh Menu', 'Buka puasa: Dada ayam panggang, nasi merah, brokoli.\nCemilan: Buah apel segar atau segenggam almond.\nPenutup: Telur rebus dan salad sayur.'], ['Manfaat', 'Memperbaiki sensitivitas insulin.\nMembantu regenerasi sel (Autofagi).\nEfektif menurunkan berat badan.']]
+          },
+          {
+            emoji: '🔥', name: 'Cutting', color: '#5c1a1a', short: 'Fase memangkas lemak tubuh sambil mempertahankan massa otot.',
+            detail: [['Pengertian', 'Fase memangkas kadar lemak tubuh sebanyak mungkin sambil mempertahankan massa otot.'], ['Aturan Makan', 'Defisit Kalori (kurangi 300-500 kalori dari TDEE).\nProtein tinggi untuk mencegah penyusutan otot.\nWajib diimbangi angkat beban (weightlifting).'], ['Contoh Menu', 'Sarapan: Putih telur rebus dan secangkir oatmeal.\nMakan siang: Dada ayam panggang dan ubi jalar.\nMakan malam: Ikan nila bakar dan bayam rebus.'], ['Manfaat', 'Menurunkan risiko penyakit kardiovaskular.\nTubuh lebih ringan dan definisi otot lebih tajam.']]
+          },
+          {
+            emoji: '💪', name: 'Bulking', color: '#1a4a1a', short: 'Fase peningkatan massa otot melalui surplus kalori yang terstruktur.',
+            detail: [['Pengertian', 'Fase peningkatan massa otot dan berat badan secara sengaja melalui pola makan berlebih yang terstruktur.'], ['Aturan Makan', 'Surplus Kalori (tambah 300-500 kalori dari TDEE).\nMengutamakan karbohidrat kompleks & protein tinggi.\nFokus pada latihan beban progresif.'], ['Contoh Menu', 'Sarapan: Telur dadar, roti gandum, selai kacang.\nMakan siang: Nasi porsi besar, daging sapi, tempe.\nMinuman: Susu full cream atau protein shake.'], ['Manfaat', 'Meningkatkan kekuatan fisik dan daya tahan tulang.\nMemperbaiki BMR (metabolisme pembakaran kalori).']]
+          },
+          {
+            emoji: '🥑', name: 'Ketogenik', color: '#3a1a4a', short: 'Diet sangat rendah karbohidrat dan tinggi lemak untuk memicu ketosis.',
+            detail: [['Pengertian', 'Diet sangat rendah karbohidrat dan tinggi lemak untuk mengubah sumber energi utama tubuh ke lemak.'], ['Aturan Makan', 'Target: 70% Lemak, 20-25% Protein, 5% Karbohidrat.\nKarbohidrat dibatasi maksimal 20-50 gram/hari.\nMemancing fase "Ketosis" dalam tubuh.'], ['Contoh Menu', 'Sarapan: Telur orak-arik dimasak dengan mentega.\nMakan siang: Salmon panggang, alpukat, dan keju.\nMakan malam: Daging iga berlemak & sayur hijau.'], ['Manfaat', 'Sangat cepat untuk menurunkan berat badan.\nMenstabilkan kadar gula darah dan insulin.']]
+          },
+        ];
 
-    el.innerHTML = `
+        el.innerHTML = `
       <div class="page-header"><h2><i class="fa fa-leaf" style="color:var(--g3)"></i>Katalog Diet</h2><p>Panduan program diet populer untuk berbagai tujuan kesehatan</p></div>
       <div class="diet-grid" id="diet-grid"></div>`;
 
-    document.getElementById('diet-grid').innerHTML = diets.map((d, i) => `
+        document.getElementById('diet-grid').innerHTML = diets.map((d, i) => `
       <div class="diet-card" onclick="showDiet(${i})" style="cursor:pointer;">
         <div class="diet-cover" style="background:linear-gradient(135deg,${d.color},${d.color}aa)"><span style="font-size:3.5rem">${d.emoji}</span></div>
         <div class="diet-body">
@@ -982,114 +1532,114 @@ const pageRenderers = {
         </div>
       </div>`).join('');
 
-    window.showDiet = (i) => {
-      const d = diets[i];
+        window.showDiet = (i) => {
+          const d = diets[i];
 
-      // Susun isi popup-nya
-      let popupBody = `<div style="text-align: center; font-size: 4rem; margin-bottom: 10px;">${d.emoji}</div>`;
+          // Susun isi popup-nya
+          let popupBody = `<div style="text-align: center; font-size: 4rem; margin-bottom: 10px;">${d.emoji}</div>`;
 
-      d.detail.forEach(([lbl, val]) => {
-        popupBody += `
+          d.detail.forEach(([lbl, val]) => {
+            popupBody += `
           <div style="margin-bottom: 12px; text-align: left; background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
             <strong style="color: var(--g3); display: block; margin-bottom: 4px;">${lbl}</strong>
             <span style="color: var(--text); font-size: 0.85rem; line-height: 1.5;">${val.replace(/\n/g, '<br>')}</span>
           </div>`;
-      });
+          });
 
-      // Panggil fungsi openModal bawaan dari kode-mu!
-      openModal(
-        d.name, // Judul
-        popupBody, // Isi konten
-        `<button class="btn btn-outline" style="width:100%" onclick="closeModal()">Tutup</button>` // Tombol bawah
-      );
-    };
-  },
+          // Panggil fungsi openModal bawaan dari kode-mu!
+          openModal(
+            d.name, // Judul
+            popupBody, // Isi konten
+            `<button class="btn btn-outline" style="width:100%" onclick="closeModal()">Tutup</button>` // Tombol bawah
+          );
+        };
+      },
 
-  // ── KALKULATOR ANGGARAN GIZI ─────────────────────────────────────────────
-  'budget-gizi': (el) => {
+        // ── KALKULATOR ANGGARAN GIZI ─────────────────────────────────────────────
+        'budget-gizi': (el) => {
 
-    // Database bahan makanan lokal murah
-    const bahanLokal = [
-      { id: 'telur', nama: 'Telur Ayam', harga: 3000, sat: 'butir', gram: 55, kal: 78, pro: 6.3, karb: 0.6, lem: 5.3, kat: 'protein' },
-      { id: 'tahu', nama: 'Tahu Putih', harga: 1250, sat: 'potong', gram: 80, kal: 62, pro: 6.7, karb: 1.9, lem: 3.5, kat: 'protein' },
-      { id: 'tempe', nama: 'Tempe Besar', harga: 5000, sat: 'bungkus', gram: 400, kal: 768, pro: 75.2, karb: 60, lem: 29.6, kat: 'protein' },
-      { id: 'ayam_dada', nama: 'Dada Ayam Pasar', harga: 8000, sat: 'potong', gram: 100, kal: 165, pro: 31, karb: 0, lem: 3.6, kat: 'protein' },
-      { id: 'ikan_kembung', nama: 'Ikan Kembung', harga: 10000, sat: 'ekor', gram: 100, kal: 105, pro: 22, karb: 0, lem: 1.9, kat: 'protein' },
-      { id: 'kacang_tanah', nama: 'Kacang Tanah', harga: 2000, sat: 'genggam', gram: 30, kal: 170, pro: 7.7, karb: 5.0, lem: 14, kat: 'protein' },
-      { id: 'tahu_goreng', nama: 'Tahu Goreng', harga: 2000, sat: 'potong', gram: 80, kal: 109, pro: 7.0, karb: 2.8, lem: 8.1, kat: 'protein' },
-      { id: 'nasi', nama: 'Beras Putih', harga: 15000, sat: 'kg', gram: 1000, kal: 1300, pro: 26.7, karb: 280, lem: 3.3, kat: 'karbo' },
-      { id: 'nasi_merah', nama: 'Nasi Merah', harga: 4000, sat: 'porsi', gram: 150, kal: 173, pro: 4.5, karb: 36, lem: 1.0, kat: 'karbo' },
-      { id: 'roti', nama: 'Roti Tawar', harga: 16000, sat: 'bungkus', gram: 500, kal: 1320, pro: 45, karb: 250, lem: 16.5, kat: 'karbo' },
-      { id: 'ubi', nama: 'Ubi Jalar', harga: 2000, sat: 'buah', gram: 100, kal: 86, pro: 1.6, karb: 20, lem: 0.1, kat: 'karbo' },
-      { id: 'oatmeal', nama: 'Oatmeal Instan', harga: 15000, sat: 'kemasan', gram: 200, kal: 754, pro: 25.7, karb: 131, lem: 14.3, kat: 'karbo' },
-      { id: 'pisang', nama: 'Pisang', harga: 15000, sat: 'ikat', gram: 1000, kal: 890, pro: 11, karb: 228, lem: 3.3, kat: 'buah' },
-      { id: 'pepaya', nama: 'Pepaya', harga: 2000, sat: 'potong', gram: 150, kal: 60, pro: 0.7, karb: 15, lem: 0.1, kat: 'buah' },
-      { id: 'bayam', nama: 'Bayam Rebus', harga: 2000, sat: 'porsi', gram: 100, kal: 23, pro: 2.9, karb: 3.6, lem: 0.4, kat: 'sayur' },
-      { id: 'kangkung', nama: 'Kangkung', harga: 5000, sat: 'ikat', gram: 200, kal: 38, pro: 4.0, karb: 6.2, lem: 0.4, kat: 'sayur' },
-      { id: 'sawi', nama: 'Sawi', harga: 5000, sat: 'ikat', gram: 200, kal: 22, pro: 2.7, karb: 3.4, lem: 0.3, kat: 'sayur' },
-      { id: 'mie_instan', nama: 'Mie Instan', harga: 3500, sat: 'bungkus', gram: 85, kal: 380, pro: 8.0, karb: 52, lem: 15, kat: 'karbo' },
-      { id: 'susu_kotak', nama: 'Susu UHT Milk', harga: 6000, sat: 'kotak', gram: 250, kal: 158, pro: 8.8, karb: 17.5, lem: 6.0, kat: 'lainnya' },
-    ];
+          // Database bahan makanan lokal murah
+          const bahanLokal = [
+            { id: 'telur', nama: 'Telur Ayam', harga: 3000, sat: 'butir', gram: 55, kal: 78, pro: 6.3, karb: 0.6, lem: 5.3, kat: 'protein' },
+            { id: 'tahu', nama: 'Tahu Putih', harga: 1250, sat: 'potong', gram: 80, kal: 62, pro: 6.7, karb: 1.9, lem: 3.5, kat: 'protein' },
+            { id: 'tempe', nama: 'Tempe Besar', harga: 5000, sat: 'bungkus', gram: 400, kal: 768, pro: 75.2, karb: 60, lem: 29.6, kat: 'protein' },
+            { id: 'ayam_dada', nama: 'Dada Ayam Pasar', harga: 8000, sat: 'potong', gram: 100, kal: 165, pro: 31, karb: 0, lem: 3.6, kat: 'protein' },
+            { id: 'ikan_kembung', nama: 'Ikan Kembung', harga: 10000, sat: 'ekor', gram: 100, kal: 105, pro: 22, karb: 0, lem: 1.9, kat: 'protein' },
+            { id: 'kacang_tanah', nama: 'Kacang Tanah', harga: 2000, sat: 'genggam', gram: 30, kal: 170, pro: 7.7, karb: 5.0, lem: 14, kat: 'protein' },
+            { id: 'tahu_goreng', nama: 'Tahu Goreng', harga: 2000, sat: 'potong', gram: 80, kal: 109, pro: 7.0, karb: 2.8, lem: 8.1, kat: 'protein' },
+            { id: 'nasi', nama: 'Beras Putih', harga: 15000, sat: 'kg', gram: 1000, kal: 1300, pro: 26.7, karb: 280, lem: 3.3, kat: 'karbo' },
+            { id: 'nasi_merah', nama: 'Nasi Merah', harga: 4000, sat: 'porsi', gram: 150, kal: 173, pro: 4.5, karb: 36, lem: 1.0, kat: 'karbo' },
+            { id: 'roti', nama: 'Roti Tawar', harga: 16000, sat: 'bungkus', gram: 500, kal: 1320, pro: 45, karb: 250, lem: 16.5, kat: 'karbo' },
+            { id: 'ubi', nama: 'Ubi Jalar', harga: 2000, sat: 'buah', gram: 100, kal: 86, pro: 1.6, karb: 20, lem: 0.1, kat: 'karbo' },
+            { id: 'oatmeal', nama: 'Oatmeal Instan', harga: 15000, sat: 'kemasan', gram: 200, kal: 754, pro: 25.7, karb: 131, lem: 14.3, kat: 'karbo' },
+            { id: 'pisang', nama: 'Pisang', harga: 15000, sat: 'ikat', gram: 1000, kal: 890, pro: 11, karb: 228, lem: 3.3, kat: 'buah' },
+            { id: 'pepaya', nama: 'Pepaya', harga: 2000, sat: 'potong', gram: 150, kal: 60, pro: 0.7, karb: 15, lem: 0.1, kat: 'buah' },
+            { id: 'bayam', nama: 'Bayam Rebus', harga: 2000, sat: 'porsi', gram: 100, kal: 23, pro: 2.9, karb: 3.6, lem: 0.4, kat: 'sayur' },
+            { id: 'kangkung', nama: 'Kangkung', harga: 5000, sat: 'ikat', gram: 200, kal: 38, pro: 4.0, karb: 6.2, lem: 0.4, kat: 'sayur' },
+            { id: 'sawi', nama: 'Sawi', harga: 5000, sat: 'ikat', gram: 200, kal: 22, pro: 2.7, karb: 3.4, lem: 0.3, kat: 'sayur' },
+            { id: 'mie_instan', nama: 'Mie Instan', harga: 3500, sat: 'bungkus', gram: 85, kal: 380, pro: 8.0, karb: 52, lem: 15, kat: 'karbo' },
+            { id: 'susu_kotak', nama: 'Susu UHT Milk', harga: 6000, sat: 'kotak', gram: 250, kal: 158, pro: 8.8, karb: 17.5, lem: 6.0, kat: 'lainnya' },
+          ];
 
-    // Algoritma Greedy 3 Fase
-    function optimasiAnggaranGizi(budget, targetProtein, preferensi) {
-      let sisa = budget;
-      let totalPro = 0, totalKal = 0, totalKarb = 0, totalLem = 0, totalHarga = 0;
-      const keranjang = [];
+          // Algoritma Greedy 3 Fase
+          function optimasiAnggaranGizi(budget, targetProtein, preferensi) {
+            let sisa = budget;
+            let totalPro = 0, totalKal = 0, totalKarb = 0, totalLem = 0, totalHarga = 0;
+            const keranjang = [];
 
-      let pool = bahanLokal.filter(b => {
-        if (preferensi === 'vegetarian') return b.kat !== 'protein' || ['tahu', 'tempe', 'telur', 'kacang_tanah', 'tahu_goreng'].includes(b.id);
-        if (preferensi === 'ikan') return b.kat !== 'protein' || ['ikan_kembung', 'tahu', 'tempe', 'telur', 'kacang_tanah', 'tahu_goreng'].includes(b.id);
-        return true;
-      });
+            let pool = bahanLokal.filter(b => {
+              if (preferensi === 'vegetarian') return b.kat !== 'protein' || ['tahu', 'tempe', 'telur', 'kacang_tanah', 'tahu_goreng'].includes(b.id);
+              if (preferensi === 'ikan') return b.kat !== 'protein' || ['ikan_kembung', 'tahu', 'tempe', 'telur', 'kacang_tanah', 'tahu_goreng'].includes(b.id);
+              return true;
+            });
 
-      // Fase 1: Protein (greedy protein/harga tertinggi)
-      const proteinPool = pool.filter(b => b.kat === 'protein').sort((a, b) => (b.pro / b.harga) - (a.pro / a.harga));
-      for (const b of proteinPool) {
-        if (totalPro >= targetProtein) break;
-        const porsiDibutuhkan = Math.ceil((targetProtein - totalPro) / b.pro);
-        const porsiMampu = Math.floor(sisa / b.harga);
-        const porsi = Math.min(porsiDibutuhkan, porsiMampu, 4);
-        if (porsi <= 0) continue;
-        const hargaTotal = porsi * b.harga;
-        keranjang.push({ ...b, porsi, hargaTotal });
-        sisa -= hargaTotal; totalPro += b.pro * porsi; totalKal += b.kal * porsi;
-        totalKarb += b.karb * porsi; totalLem += b.lem * porsi; totalHarga += hargaTotal;
-      }
+            // Fase 1: Protein (greedy protein/harga tertinggi)
+            const proteinPool = pool.filter(b => b.kat === 'protein').sort((a, b) => (b.pro / b.harga) - (a.pro / a.harga));
+            for (const b of proteinPool) {
+              if (totalPro >= targetProtein) break;
+              const porsiDibutuhkan = Math.ceil((targetProtein - totalPro) / b.pro);
+              const porsiMampu = Math.floor(sisa / b.harga);
+              const porsi = Math.min(porsiDibutuhkan, porsiMampu, 4);
+              if (porsi <= 0) continue;
+              const hargaTotal = porsi * b.harga;
+              keranjang.push({ ...b, porsi, hargaTotal });
+              sisa -= hargaTotal; totalPro += b.pro * porsi; totalKal += b.kal * porsi;
+              totalKarb += b.karb * porsi; totalLem += b.lem * porsi; totalHarga += hargaTotal;
+            }
 
-      // Fase 2: Karbohidrat
-      const karboPool = pool.filter(b => b.kat === 'karbo').sort((a, b) => (b.kal / b.harga) - (a.kal / a.harga));
-      for (const b of karboPool) {
-        if (sisa < b.harga || keranjang.some(k => k.id === b.id)) continue;
-        const porsi = Math.min(Math.floor(sisa / b.harga), 2);
-        if (porsi <= 0) continue;
-        const hargaTotal = porsi * b.harga;
-        keranjang.push({ ...b, porsi, hargaTotal });
-        sisa -= hargaTotal; totalKal += b.kal * porsi; totalKarb += b.karb * porsi;
-        totalLem += b.lem * porsi; totalHarga += hargaTotal;
-      }
+            // Fase 2: Karbohidrat
+            const karboPool = pool.filter(b => b.kat === 'karbo').sort((a, b) => (b.kal / b.harga) - (a.kal / a.harga));
+            for (const b of karboPool) {
+              if (sisa < b.harga || keranjang.some(k => k.id === b.id)) continue;
+              const porsi = Math.min(Math.floor(sisa / b.harga), 2);
+              if (porsi <= 0) continue;
+              const hargaTotal = porsi * b.harga;
+              keranjang.push({ ...b, porsi, hargaTotal });
+              sisa -= hargaTotal; totalKal += b.kal * porsi; totalKarb += b.karb * porsi;
+              totalLem += b.lem * porsi; totalHarga += hargaTotal;
+            }
 
-      // Fase 3: Sayur & Buah
-      for (const b of pool.filter(b => b.kat === 'sayur' || b.kat === 'buah')) {
-        if (sisa < b.harga) continue;
-        keranjang.push({ ...b, porsi: 1, hargaTotal: b.harga });
-        sisa -= b.harga; totalKal += b.kal; totalHarga += b.harga;
-      }
+            // Fase 3: Sayur & Buah
+            for (const b of pool.filter(b => b.kat === 'sayur' || b.kat === 'buah')) {
+              if (sisa < b.harga) continue;
+              keranjang.push({ ...b, porsi: 1, hargaTotal: b.harga });
+              sisa -= b.harga; totalKal += b.kal; totalHarga += b.harga;
+            }
 
-      return {
-        keranjang,
-        totalPro: Math.round(totalPro * 10) / 10,
-        totalKal: Math.round(totalKal),
-        totalKarb: Math.round(totalKarb * 10) / 10,
-        totalLem: Math.round(totalLem * 10) / 10,
-        totalHarga,
-        sisaBudget: budget - totalHarga,
-        tercapai: totalPro >= targetProtein * 0.85,
-      };
-    }
+            return {
+              keranjang,
+              totalPro: Math.round(totalPro * 10) / 10,
+              totalKal: Math.round(totalKal),
+              totalKarb: Math.round(totalKarb * 10) / 10,
+              totalLem: Math.round(totalLem * 10) / 10,
+              totalHarga,
+              sisaBudget: budget - totalHarga,
+              tercapai: totalPro >= targetProtein * 0.85,
+            };
+          }
 
-    // Render halaman
-    el.innerHTML = `
+          // Render halaman
+          el.innerHTML = `
       <div class="page-header">
         <h2><i class="fa fa-wallet" style="color:var(--g3)"></i> Kalkulator Anggaran Gizi</h2>
         <p>Racik menu harian bergizi sesuai kantong — cocok untuk mahasiswa & calon Abdi Negara!</p>
@@ -1174,52 +1724,52 @@ const pageRenderers = {
       </div>
     `;
 
-    // Update radio border on change
-    el.querySelectorAll('input[name="bg-pref"]').forEach(r => {
-      r.addEventListener('change', () => {
-        el.querySelectorAll('input[name="bg-pref"]').forEach(x => x.closest('label').style.borderColor = 'var(--border)');
-        r.closest('label').style.borderColor = 'var(--g4)';
-      });
-    });
+          // Update radio border on change
+          el.querySelectorAll('input[name="bg-pref"]').forEach(r => {
+            r.addEventListener('change', () => {
+              el.querySelectorAll('input[name="bg-pref"]').forEach(x => x.closest('label').style.borderColor = 'var(--border)');
+              r.closest('label').style.borderColor = 'var(--g4)';
+            });
+          });
 
-    window.hitungAnggaranGizi = () => {
-      const budgetVal = document.getElementById('bg-budget').value.trim();
-      const proteinVal = document.getElementById('bg-protein').value.trim();
-      if (!budgetVal || !proteinVal) {
-        toast('Silakan isi Budget Harian dan Target Protein terlebih dahulu!', 'warning');
-        return;
-      }
-      const budget = parseInt(budgetVal);
-      const targetProtein = parseInt(proteinVal);
-      const preferensi = document.querySelector('input[name="bg-pref"]:checked')?.value || 'semua';
-      if (budget < 5000) { toast('Budget minimal Rp 5.000', 'warning'); return; }
-      if (targetProtein < 10) { toast('Target protein minimal 10g', 'warning'); return; }
-      const hasil = optimasiAnggaranGizi(budget, targetProtein, preferensi);
-      renderHasil(hasil, budget, targetProtein);
-    };
+          window.hitungAnggaranGizi = () => {
+            const budgetVal = document.getElementById('bg-budget').value.trim();
+            const proteinVal = document.getElementById('bg-protein').value.trim();
+            if (!budgetVal || !proteinVal) {
+              toast('Silakan isi Budget Harian dan Target Protein terlebih dahulu!', 'warning');
+              return;
+            }
+            const budget = parseInt(budgetVal);
+            const targetProtein = parseInt(proteinVal);
+            const preferensi = document.querySelector('input[name="bg-pref"]:checked')?.value || 'semua';
+            if (budget < 5000) { toast('Budget minimal Rp 5.000', 'warning'); return; }
+            if (targetProtein < 10) { toast('Target protein minimal 10g', 'warning'); return; }
+            const hasil = optimasiAnggaranGizi(budget, targetProtein, preferensi);
+            renderHasil(hasil, budget, targetProtein);
+          };
 
-    function renderHasil(h, budget, targetProtein) {
-      document.getElementById('bg-empty').style.display = 'none';
-      document.getElementById('bg-result').style.display = 'block';
+          function renderHasil(h, budget, targetProtein) {
+            document.getElementById('bg-empty').style.display = 'none';
+            document.getElementById('bg-result').style.display = 'block';
 
-      // Summary cards
-      const proteinPct = Math.min(100, Math.round((h.totalPro / targetProtein) * 100));
-      document.getElementById('bg-summary').innerHTML = [
-        { icon: 'fa-fire', label: 'Total Kalori', val: `${h.totalKal} kkal`, color: '#ef4444', bg: '#fef2f2' },
-        { icon: 'fa-drumstick-bite', label: 'Total Protein', val: `${h.totalPro}g`, color: '#7c3aed', bg: '#ede9fe' },
-        { icon: 'fa-receipt', label: 'Total Biaya', val: `Rp ${h.totalHarga.toLocaleString('id-ID')}`, color: '#d97706', bg: '#fef3c7' },
-        { icon: 'fa-piggy-bank', label: 'Sisa Budget', val: `Rp ${h.sisaBudget.toLocaleString('id-ID')}`, color: h.sisaBudget >= 0 ? '#15803d' : '#ef4444', bg: h.sisaBudget >= 0 ? '#f0fdf4' : '#fef2f2' },
-      ].map(s => `
+            // Summary cards
+            const proteinPct = Math.min(100, Math.round((h.totalPro / targetProtein) * 100));
+            document.getElementById('bg-summary').innerHTML = [
+              { icon: 'fa-fire', label: 'Total Kalori', val: `${h.totalKal} kkal`, color: '#ef4444', bg: '#fef2f2' },
+              { icon: 'fa-drumstick-bite', label: 'Total Protein', val: `${h.totalPro}g`, color: '#7c3aed', bg: '#ede9fe' },
+              { icon: 'fa-receipt', label: 'Total Biaya', val: `Rp ${h.totalHarga.toLocaleString('id-ID')}`, color: '#d97706', bg: '#fef3c7' },
+              { icon: 'fa-piggy-bank', label: 'Sisa Budget', val: `Rp ${h.sisaBudget.toLocaleString('id-ID')}`, color: h.sisaBudget >= 0 ? '#15803d' : '#ef4444', bg: h.sisaBudget >= 0 ? '#f0fdf4' : '#fef2f2' },
+            ].map(s => `
         <div class="stat-card" style="flex-direction:column;text-align:center;padding:16px 12px">
           <div class="stat-icon" style="background:${s.bg};color:${s.color};margin:0 auto 10px"><i class="fa ${s.icon}"></i></div>
           <div style="font-size:1rem;font-weight:700;color:${s.color}">${s.val}</div>
           <div class="stat-label" style="margin-top:4px">${s.label}</div>
         </div>`).join('');
 
-      // Protein progress bar
-      const barColor = proteinPct >= 100 ? '#15803d' : proteinPct >= 75 ? '#d97706' : '#ef4444';
-      const barMsg = proteinPct >= 100 ? '<i class="fa fa-check-circle"></i> Target protein tercapai!' : proteinPct >= 75 ? '<i class="fa fa-exclamation-triangle"></i> Mendekati target' : '<i class="fa fa-times-circle"></i> Target belum terpenuhi';
-      document.getElementById('bg-protein-bar-card').innerHTML = `
+            // Protein progress bar
+            const barColor = proteinPct >= 100 ? '#15803d' : proteinPct >= 75 ? '#d97706' : '#ef4444';
+            const barMsg = proteinPct >= 100 ? '<i class="fa fa-check-circle"></i> Target protein tercapai!' : proteinPct >= 75 ? '<i class="fa fa-exclamation-triangle"></i> Mendekati target' : '<i class="fa fa-times-circle"></i> Target belum terpenuhi';
+            document.getElementById('bg-protein-bar-card').innerHTML = `
         <div class="card-header">
           <div class="card-title"><div class="card-icon" style="background:#ede9fe;color:#7c3aed"><i class="fa fa-bullseye"></i></div>Pencapaian Target Protein</div>
           <span style="font-weight:700;color:${barColor}">${h.totalPro}g / ${targetProtein}g</span>
@@ -1234,10 +1784,10 @@ const pageRenderers = {
           </div>
         </div>`;
 
-      // Keranjang belanja
-      const katColor = { protein: '#7c3aed', karbo: '#d97706', sayur: '#15803d', buah: '#e11d48', lainnya: '#3b82f6' };
-      const katBg = { protein: '#ede9fe', karbo: '#fef3c7', sayur: '#f0fdf4', buah: '#fff1f2', lainnya: '#eff6ff' };
-      document.getElementById('bg-keranjang').innerHTML = h.keranjang.length ? `
+            // Keranjang belanja
+            const katColor = { protein: '#7c3aed', karbo: '#d97706', sayur: '#15803d', buah: '#e11d48', lainnya: '#3b82f6' };
+            const katBg = { protein: '#ede9fe', karbo: '#fef3c7', sayur: '#f0fdf4', buah: '#fff1f2', lainnya: '#eff6ff' };
+            document.getElementById('bg-keranjang').innerHTML = h.keranjang.length ? `
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;padding:4px">
           ${h.keranjang.map(item => `
             <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg);border-radius:12px;border:1.5px solid var(--border)">
@@ -1255,39 +1805,39 @@ const pageRenderers = {
           <span>${h.keranjang.length} item · ${h.keranjang.reduce((a, b) => a + b.porsi, 0)} porsi</span>
           <span style="color:var(--g2);font-weight:700">Total: Rp ${h.totalHarga.toLocaleString('id-ID')}</span>
         </div>` :
-        `<div class="empty-state"><div class="empty-icon"><i class="fa fa-shopping-cart"></i></div><div class="empty-title">Budget terlalu kecil</div></div>`;
+              `<div class="empty-state"><div class="empty-icon"><i class="fa fa-shopping-cart"></i></div><div class="empty-title">Budget terlalu kecil</div></div>`;
 
-      const hemPct = Math.round((h.sisaBudget / budget) * 100);
-      document.getElementById('bg-badge-hemat').innerHTML = hemPct > 0 ? `<i class="fa fa-coins"></i> Hemat ${hemPct}%` : '<i class="fa fa-check-circle"></i> Budget optimal';
-      document.getElementById('bg-badge-hemat').className = `status-badge ${hemPct > 5 ? 'status-diterima' : 'status-pending'}`;
+            const hemPct = Math.round((h.sisaBudget / budget) * 100);
+            document.getElementById('bg-badge-hemat').innerHTML = hemPct > 0 ? `<i class="fa fa-coins"></i> Hemat ${hemPct}%` : '<i class="fa fa-check-circle"></i> Budget optimal';
+            document.getElementById('bg-badge-hemat').className = `status-badge ${hemPct > 5 ? 'status-diterima' : 'status-pending'}`;
 
-      // Jadwal makan
-      const protein = h.keranjang.filter(k => k.kat === 'protein');
-      const karbo = h.keranjang.filter(k => k.kat === 'karbo');
-      const lain = h.keranjang.filter(k => k.kat === 'sayur' || k.kat === 'buah');
-      const slot = (icon, waktu, warna, items) => {
-        if (!items.length) return '';
-        return `<div style="display:flex;gap:14px;padding:13px;border-radius:12px;background:${warna};margin-bottom:10px;align-items:flex-start">
+            // Jadwal makan
+            const protein = h.keranjang.filter(k => k.kat === 'protein');
+            const karbo = h.keranjang.filter(k => k.kat === 'karbo');
+            const lain = h.keranjang.filter(k => k.kat === 'sayur' || k.kat === 'buah');
+            const slot = (icon, waktu, warna, items) => {
+              if (!items.length) return '';
+              return `<div style="display:flex;gap:14px;padding:13px;border-radius:12px;background:${warna};margin-bottom:10px;align-items:flex-start">
           <div style="font-size:1.4rem;min-width:30px;text-align:center">${icon}</div>
           <div><div style="font-weight:700;font-size:.88rem;margin-bottom:4px">${waktu}</div>
           <div style="font-size:.82rem;color:var(--muted);line-height:1.7">${items.map(i => `${i.porsi > 1 ? i.porsi + '× ' : ''}${i.nama}`).join(' + ')}</div></div>
         </div>`;
-      };
-      document.getElementById('bg-jadwal').innerHTML = `<div style="padding:4px 4px 10px">
+            };
+            document.getElementById('bg-jadwal').innerHTML = `<div style="padding:4px 4px 10px">
         ${slot('<i class="fa fa-sun" style="color:#d97706"></i>', 'Sarapan (06.00–08.00)', '#fef9c3', [...karbo.slice(0, 1), ...protein.slice(0, 1), ...lain.slice(0, 1)])}
         ${slot('<i class="fa fa-utensils" style="color:#15803d"></i>', 'Makan Siang (11.00–13.00)', '#dcfce7', [...karbo.slice(1, 2), ...protein.slice(1, 3)])}
         ${slot('<i class="fa fa-moon" style="color:#7c3aed"></i>', 'Makan Malam (17.00–19.00)', '#ede9fe', [...karbo.slice(2, 3), ...protein.slice(3,)])}
         ${slot('<i class="fa fa-cookie-bite" style="color:#e11d48"></i>', 'Cemilan', '#fff1f2', lain.slice(1,))}
       </div>`;
 
-      // Tips
-      const tips = [];
-      if (!h.tercapai) tips.push({ icon: '<i class="fa fa-lightbulb" style="color:#d97706"></i>', msg: `Target protein belum penuh. Coba naikkan budget atau turunkan target protein.` });
-      tips.push({ icon: '<i class="fa fa-egg" style="color:#7c3aed"></i>', msg: '<strong>Telur</strong> adalah sumber protein termurah per gram — tambahkan tiap hari!' });
-      tips.push({ icon: '<i class="fa fa-shopping-basket" style="color:#15803d"></i>', msg: 'Belanja di <strong>pasar tradisional</strong> bisa hemat 20–40% vs supermarket.' });
-      tips.push({ icon: '<i class="fa fa-clock" style="color:#2563eb"></i>', msg: '<strong>Meal prep</strong> hari Minggu: masak banyak sekaligus, simpan di kulkas, hemat waktu & uang.' });
-      if (h.totalKal < 1500) tips.push({ icon: '<i class="fa fa-bolt" style="color:#e11d48"></i>', msg: 'Kalori masih kurang dari 1500 kkal. Tambahkan <strong>nasi merah atau ubi</strong> untuk energi.' });
-      document.getElementById('bg-tips').innerHTML = `
+            // Tips
+            const tips = [];
+            if (!h.tercapai) tips.push({ icon: '<i class="fa fa-lightbulb" style="color:#d97706"></i>', msg: `Target protein belum penuh. Coba naikkan budget atau turunkan target protein.` });
+            tips.push({ icon: '<i class="fa fa-egg" style="color:#7c3aed"></i>', msg: '<strong>Telur</strong> adalah sumber protein termurah per gram — tambahkan tiap hari!' });
+            tips.push({ icon: '<i class="fa fa-shopping-basket" style="color:#15803d"></i>', msg: 'Belanja di <strong>pasar tradisional</strong> bisa hemat 20–40% vs supermarket.' });
+            tips.push({ icon: '<i class="fa fa-clock" style="color:#2563eb"></i>', msg: '<strong>Meal prep</strong> hari Minggu: masak banyak sekaligus, simpan di kulkas, hemat waktu & uang.' });
+            if (h.totalKal < 1500) tips.push({ icon: '<i class="fa fa-bolt" style="color:#e11d48"></i>', msg: 'Kalori masih kurang dari 1500 kkal. Tambahkan <strong>nasi merah atau ubi</strong> untuk energi.' });
+            document.getElementById('bg-tips').innerHTML = `
         <div class="card-header"><div class="card-title"><div class="card-icon" style="background:#fef3c7;color:#d97706"><i class="fa fa-lightbulb"></i></div>Tips Hemat & Bergizi</div></div>
         <div style="padding:4px 4px 14px;display:flex;flex-direction:column;gap:8px">
           ${tips.map(t => `<div style="display:flex;gap:12px;align-items:flex-start;padding:11px 14px;background:var(--bg);border-radius:10px;border-left:3px solid var(--g4)">
@@ -1296,9 +1846,9 @@ const pageRenderers = {
           </div>`).join('')}
         </div>`;
 
-      document.getElementById('bg-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  },
+            document.getElementById('bg-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        },
 };
 
 // Fungsi untuk memunculkan/menyembunyikan menu di HP
