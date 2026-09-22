@@ -9,8 +9,12 @@ async function api(action, method = 'GET', body = null, params = {}) {
   for (const [k, v] of Object.entries(params)) url += `&${k}=${encodeURIComponent(v)}`;
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(url, opts);
-  return r.json();
+  try {
+    const r = await fetch(url, opts);
+    return await r.json();
+  } catch (err) {
+    return { success: false, message: 'Gagal terhubung ke server atau database.' };
+  }
 }
 
 function toast(msg, type = 'success') {
@@ -24,6 +28,41 @@ function toast(msg, type = 'success') {
 function showAlert(id, msg, type = 'danger') {
   document.getElementById(id).innerHTML = `<div class="alert alert-${type}"><i class="fa fa-${type === 'success' ? 'check' : type === 'danger' ? 'times' : 'info'}-circle"></i>${msg}</div>`;
   setTimeout(() => { const el = document.getElementById(id); if (el) el.innerHTML = ''; }, 4000);
+}
+
+function validateFoodInput(text) {
+  if (!text || typeof text !== 'string') {
+    return { valid: false, message: 'Nama makanan tidak boleh kosong!' };
+  }
+  const trimmed = text.trim();
+  if (trimmed.length < 2) {
+    return { valid: false, message: 'Nama makanan terlalu pendek (minimal 2 karakter).' };
+  }
+  // Cek jika seluruhnya angka atau simbol
+  if (/^[\d\s\W_]+$/.test(trimmed)) {
+    return { valid: false, message: 'Input tidak valid! Angka atau simbol bukan merupakan nama makanan di dunia nyata.' };
+  }
+  const lettersOnly = trimmed.replace(/[^a-zA-Z]/g, '');
+  if (lettersOnly.length < 2) {
+    return { valid: false, message: 'Input harus menyertakan nama makanan yang jelas (huruf alfabet).' };
+  }
+
+  // Blacklist kata benda non-makanan
+  const nonFoods = ['meja', 'kursi', 'sepatu', 'sandal', 'laptop', 'komputer', 'hp', 'handphone', 'smartphone', 'baju', 'celana', 'tas', 'dompet', 'batu', 'kayu', 'besi', 'kertas', 'buku', 'pulpen', 'pensil', 'motor', 'mobil', 'sepeda', 'helm', 'kucing', 'anjing', 'tikus'];
+  const lower = trimmed.toLowerCase();
+  for (const nf of nonFoods) {
+    const regex = new RegExp(`\\b${nf}\\b`, 'i');
+    if (regex.test(lower)) {
+      return { valid: false, message: `"${trimmed}" bukan merupakan makanan atau minuman konsumsi di dunia nyata!` };
+    }
+  }
+
+  // Cek ketikan keyboard acak
+  if (/qwerty|asdfgh|zxcvbn/i.test(lower) || /[bcdfghjklmnpqrstvwxyz]{5,}/i.test(lettersOnly)) {
+    return { valid: false, message: `Input "${trimmed}" terdeteksi sebagai ketikan acak, bukan nama makanan nyata.` };
+  }
+
+  return { valid: true };
 }
 
 function confirm(title, msg, icon, cb) {
@@ -598,14 +637,23 @@ const pageRenderers = {
         if (stat) stat.innerHTML = `<span style="color:var(--g3)"><i class="fa fa-check-circle"></i> Hasil kamera terdeteksi via ${res.source}!</span>`;
         toast('Form berhasil diisi dari kamera!');
       } else {
-        if (stat) stat.innerHTML = `<span style="color:var(--danger)">Gagal mendeteksi kamera AI</span>`;
+        if (stat) stat.innerHTML = `<span style="color:var(--danger)"><i class="fa fa-exclamation-circle"></i> ${res.message || 'Gagal mendeteksi kamera AI'}</span>`;
+        toast(res.message || 'Gagal mendeteksi kamera AI', 'error');
       }
     };
 
     window.autoFillAiText = async () => {
-      const q = document.getElementById('mk-ai-prompt').value.trim() || document.getElementById('mk-nama').value.trim();
+      const q = (document.getElementById('mk-ai-prompt').value.trim() || document.getElementById('mk-nama').value.trim());
       if (!q) { toast('Ketikkan nama makanan terlebih dahulu', 'warning'); return; }
+      
+      const val = validateFoodInput(q);
       const stat = document.getElementById('mk-ai-status');
+      if (!val.valid) {
+        if (stat) stat.innerHTML = `<span style="color:var(--danger)"><i class="fa fa-exclamation-triangle"></i> ${val.message}</span>`;
+        toast(val.message, 'warning');
+        return;
+      }
+
       stat.innerHTML = `<i class="fa fa-spinner fa-spin"></i> AI sedang menganalisis nutrisi ${q}...`;
       const apiKey = localStorage.getItem('sigizi_gemini_key') || '';
       const res = await api('analyze_ai_text', 'POST', { nama_makanan: q, api_key: apiKey });
@@ -619,7 +667,8 @@ const pageRenderers = {
         stat.innerHTML = `<span style="color:var(--g3)"><i class="fa fa-check-circle"></i> Berhasil diisi otomatis via ${res.source}!</span>`;
         toast('Form berhasil diisi otomatis!');
       } else {
-        stat.innerHTML = `<span style="color:var(--danger)">Gagal menganalisis AI</span>`;
+        stat.innerHTML = `<span style="color:var(--danger)"><i class="fa fa-times-circle"></i> ${res.message || 'Gagal menganalisis AI'}</span>`;
+        toast(res.message || 'Gagal menganalisis AI', 'error');
       }
     };
 
@@ -640,12 +689,12 @@ const pageRenderers = {
           document.getElementById('mk-kal').value = res.data.kalori || 0;
           document.getElementById('mk-pro').value = res.data.protein || 0;
           document.getElementById('mk-karb').value = res.data.karbohidrat || 0;
-          document.getElementById('mk-lem Old').value = res.data.lemak || 0;
           document.getElementById('mk-lem').value = res.data.lemak || 0;
           stat.innerHTML = `<span style="color:var(--g3)"><i class="fa fa-check-circle"></i> Foto berhasil terdeteksi via ${res.source}!</span>`;
           toast('Form berhasil diisi otomatis dari foto!');
         } else {
-          stat.innerHTML = `<span style="color:var(--danger)">Gagal mendeteksi foto AI</span>`;
+          stat.innerHTML = `<span style="color:var(--danger)"><i class="fa fa-times-circle"></i> ${res.message || 'Gagal mendeteksi foto AI'}</span>`;
+          toast(res.message || 'Gagal mendeteksi foto AI', 'error');
         }
       };
       reader.readAsDataURL(file);
@@ -656,7 +705,13 @@ const pageRenderers = {
     };
 
     window.saveMakanan = async () => {
-      const payload = { nama_makanan: document.getElementById('mk-nama').value, kategori: document.getElementById('mk-kat').value, kalori: document.getElementById('mk-kal').value, protein: document.getElementById('mk-pro').value, karbohidrat: document.getElementById('mk-karb').value, lemak: document.getElementById('mk-lem').value };
+      const nama = document.getElementById('mk-nama').value.trim();
+      const val = validateFoodInput(nama);
+      if (!val.valid) {
+        showAlert('mk-alert', val.message);
+        return;
+      }
+      const payload = { nama_makanan: nama, kategori: document.getElementById('mk-kat').value, kalori: document.getElementById('mk-kal').value, protein: document.getElementById('mk-pro').value, karbohidrat: document.getElementById('mk-karb').value, lemak: document.getElementById('mk-lem').value };
       const r = await api('create_makanan', 'POST', payload);
       if (r.success) { toast(r.message); closeModal(); load(); } else showAlert('mk-alert', r.message);
     };
@@ -670,7 +725,13 @@ const pageRenderers = {
     };
 
     window.updateMakanan = async (id) => {
-      const payload = { id_makanan: id, nama_makanan: document.getElementById('mk-nama').value, kategori: document.getElementById('mk-kat').value, kalori: document.getElementById('mk-kal').value, protein: document.getElementById('mk-pro').value, karbohidrat: document.getElementById('mk-karb').value, lemak: document.getElementById('mk-lem').value };
+      const nama = document.getElementById('mk-nama').value.trim();
+      const val = validateFoodInput(nama);
+      if (!val.valid) {
+        showAlert('mk-alert', val.message);
+        return;
+      }
+      const payload = { id_makanan: id, nama_makanan: nama, kategori: document.getElementById('mk-kat').value, kalori: document.getElementById('mk-kal').value, protein: document.getElementById('mk-pro').value, karbohidrat: document.getElementById('mk-karb').value, lemak: document.getElementById('mk-lem').value };
       const r = await api('update_makanan', 'PUT', payload);
       if (r.success) { toast(r.message); closeModal(); load(); } else showAlert('mk-alert', r.message);
     };
@@ -772,14 +833,26 @@ const pageRenderers = {
         btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> AI Mendeteksi Foto...`;
         const apiKey = localStorage.getItem('sigizi_gemini_key') || '';
         const aiRes = await api('analyze_ai_image', 'POST', { image: reqImageBase64, api_key: apiKey });
-        if (aiRes.success && aiRes.data) {
-          nama = aiRes.data.nama_makanan || 'Makanan Terdeteksi Foto';
+        if (aiRes.success && aiRes.data && aiRes.data.nama_makanan) {
+          nama = aiRes.data.nama_makanan;
         } else {
-          nama = 'Makanan Terdeteksi Foto';
+          btn.disabled = false;
+          btn.innerHTML = `<i class="fa fa-paper-plane"></i> Kirim & Auto-ACC AI`;
+          showAlert('req-alert', aiRes.message || 'Foto tidak terdeteksi sebagai makanan nyata di dunia.');
+          return;
         }
       }
 
-      btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> Memproses Auto-ACC...`;
+      // Validasi nama makanan
+      const val = validateFoodInput(nama);
+      if (!val.valid) {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa fa-paper-plane"></i> Kirim & Auto-ACC AI`;
+        showAlert('req-alert', val.message);
+        return;
+      }
+
+      btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> Memproses Verifikasi Gizi...`;
       const r = await api('create_request', 'POST', { nama_makanan_req: nama });
       btn.disabled = false;
       btn.innerHTML = `<i class="fa fa-paper-plane"></i> Kirim & Auto-ACC AI`;
@@ -1140,6 +1213,14 @@ const pageRenderers = {
         toast('Ketikkan nama atau deskripsi makanan terlebih dahulu', 'warning');
         return;
       }
+      const val = validateFoodInput(text);
+      if (!val.valid) {
+        const resCard = document.getElementById('ai-result-card');
+        if (resCard) resCard.style.display = 'none';
+        toast(val.message, 'warning');
+        return;
+      }
+
       const btn = document.getElementById('btn-ai-text');
       const originalText = btn.innerHTML;
       btn.disabled = true;
@@ -1151,9 +1232,13 @@ const pageRenderers = {
         if (res.success && res.data) {
           renderAiResult(res.data, res.source);
         } else {
+          const resCard = document.getElementById('ai-result-card');
+          if (resCard) resCard.style.display = 'none';
           toast(res.message || 'Gagal menganalisis makanan', 'error');
         }
       } catch (err) {
+        const resCard = document.getElementById('ai-result-card');
+        if (resCard) resCard.style.display = 'none';
         toast('Terjadi kesalahan koneksi', 'error');
       } finally {
         btn.disabled = false;
@@ -1177,9 +1262,13 @@ const pageRenderers = {
         if (res.success && res.data) {
           renderAiResult(res.data, res.source);
         } else {
+          const resCard = document.getElementById('ai-result-card');
+          if (resCard) resCard.style.display = 'none';
           toast(res.message || 'Gagal mengenali foto makanan', 'error');
         }
       } catch (err) {
+        const resCard = document.getElementById('ai-result-card');
+        if (resCard) resCard.style.display = 'none';
         toast('Terjadi kesalahan analisis foto', 'error');
       } finally {
         btn.disabled = false;
